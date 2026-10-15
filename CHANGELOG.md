@@ -7,6 +7,27 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [0.9.0] — Fase 9: operação remota
+
+### Adicionado
+
+- Captura da tela de cada TV pelo painel. A TV usa `PixelCopy`, que
+  inclui sites e vídeos, e a imagem fica só na memória do servidor.
+- Menu oculto na TV (⬆⬆⬇⬇ ou OK segurado por 2 s) com informações da
+  conexão, do conteúdo, do cache e do log, mais Recarregar e Desparear.
+- A TV pode se desparear sozinha (`DELETE /api/v1/device`).
+- Log de auditoria de todas as ações que mudam algo, com página própria no
+  painel. Nunca grava corpo, parâmetros ou cookies.
+- Migração 5 do banco (tabela `audit_log`).
+
+### Alterado
+
+- Desparear a TV também apaga o cache de mídia dela.
+
+### Corrigido
+
+- O app da TV aceitava mal respostas `204` sem corpo.
+
 ## [0.8.0] — Fase 8: grupos e agendamento
 
 ### Adicionado

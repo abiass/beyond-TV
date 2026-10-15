@@ -58,6 +58,11 @@ class HomePage extends ConsumerWidget {
             icon: const Icon(Icons.calendar_month_outlined),
             onPressed: () => context.go(Routes.schedule),
           ),
+          IconButton(
+            tooltip: 'Auditoria',
+            icon: const Icon(Icons.history),
+            onPressed: () => context.go(Routes.audit),
+          ),
           const SizedBox(width: 8),
           _LiveIndicator(live: live),
           const SizedBox(width: 16),

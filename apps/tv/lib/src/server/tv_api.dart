@@ -27,6 +27,7 @@ class TvApi {
   final http.Client _client;
 
   static const _timeout = Duration(seconds: 8);
+  static const unpairTimeout = Duration(seconds: 5);
 
   /// Confere se [server] é um servidor Beyond TV que está respondendo.
   Future<void> checkServer(ServerAddress server) async {
@@ -50,16 +51,27 @@ class TvApi {
     }
   }
 
+  /// A TV se remove do servidor (`DELETE /api/v1/device`, com o Bearer da
+  /// TV). Quem chama ignora a falha: desparear localmente não depende dele.
+  Future<void> unpairSelf(ServerAddress server, String token) async {
+    final request = http.Request('DELETE', server.resolve('/api/v1/device'))
+      ..headers['Authorization'] = 'Bearer $token';
+    await _send(request, timeout: unpairTimeout);
+  }
+
   /// Envia [request] e devolve o corpo JSON.
   ///
   /// Lança [TvApiException] com a mensagem do servidor quando ele responde
   /// com erro, ou com "servidor inacessível" quando não responde.
-  Future<Map<String, Object?>> _send(http.Request request) async {
+  Future<Map<String, Object?>> _send(
+    http.Request request, {
+    Duration timeout = _timeout,
+  }) async {
     final http.Response response;
     try {
       response = await http.Response.fromStream(
-        await _client.send(request).timeout(_timeout),
-      ).timeout(_timeout);
+        await _client.send(request).timeout(timeout),
+      ).timeout(timeout);
     } on TimeoutException {
       throw unreachable;
     } on http.ClientException {
@@ -68,7 +80,9 @@ class TvApi {
 
     final Object? json;
     try {
-      json = response.body.isEmpty ? const {} : jsonDecode(response.body);
+      json = response.body.isEmpty
+          ? const <String, Object?>{}
+          : jsonDecode(response.body);
     } on FormatException {
       throw _notBeyondServer;
     }

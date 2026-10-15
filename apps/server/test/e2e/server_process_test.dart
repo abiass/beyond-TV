@@ -69,6 +69,7 @@ void main() {
   late String deviceToken;
   late _Caixa admin;
   late _Caixa tv;
+  late String capturaBase64;
 
   Future<(int, Map<String, Object?>)> req(
     String metodo,
@@ -468,6 +469,62 @@ void main() {
       );
     });
 
+    test('captura de tela: pedido, resultado, evento e download', () async {
+      final jpeg = <int>[
+        0xFF,
+        0xD8,
+        0xFF,
+        0xE0,
+        ...List.generate(300, (i) => i % 256),
+      ];
+      capturaBase64 = base64Encode(jpeg);
+      final cmd = tv.next(MessageTypes.cmdScreenshot);
+      final evento = admin.next(MessageTypes.deviceScreenshot);
+
+      final (status, corpo) = await req(
+        'POST',
+        '/api/v1/devices/$deviceId/commands',
+        body: {'type': 'screenshot'},
+      );
+
+      expect(status, 202);
+      final requestId = corpo['requestId']! as String;
+      expect(((await cmd)['payload']! as Map)['requestId'], requestId);
+      tv.enviar(
+        Envelope.create(
+          MessageTypes.screenshotResult,
+          payload: {
+            'requestId': requestId,
+            'mime': 'image/jpeg',
+            'data': capturaBase64,
+          },
+        ),
+      );
+      expect(((await evento)['payload']! as Map)['deviceId'], deviceId);
+      final (down, bytes, headers) = await bruto(
+        'GET',
+        '/api/v1/devices/$deviceId/screenshot',
+        headers: {'cookie': cookie},
+      );
+      expect(down, 200);
+      expect(bytes, jpeg);
+      expect(headers.value('content-type'), 'image/jpeg');
+      expect(headers.value('cache-control'), 'no-store');
+    });
+
+    test('auditoria registra a renomeação, com admin e sem query', () async {
+      final (status, corpo) = await req('GET', '/api/v1/audit?limit=500');
+
+      expect(status, 200);
+      final linhas = (corpo['entries']! as List).cast<Map<String, Object?>>();
+      final patch = linhas.firstWhere((e) => e['method'] == 'PATCH');
+      expect(patch['path'], '/api/v1/devices/$deviceId');
+      expect(patch['status'], 200);
+      expect(patch['adminName'], 'admin');
+      expect(patch['ip'], '127.0.0.1');
+      expect(linhas.any((e) => e['path'] == '/api/v1/setup'), isTrue);
+    });
+
     test('unpair fecha a TV com 4401 e remove o dispositivo', () async {
       final unpair = tv.next(MessageTypes.cmdUnpair);
 
@@ -492,6 +549,7 @@ void main() {
       expect(saida, contains('iniciado'));
       expect(saida, isNot(contains(deviceToken)));
       expect(saida, isNot(contains(_senha)));
+      expect(saida, isNot(contains(capturaBase64)));
     });
   });
 }

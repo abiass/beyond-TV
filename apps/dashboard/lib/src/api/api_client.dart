@@ -346,6 +346,61 @@ class ApiClient {
   Future<void> sendCommand(String id, String type) =>
       _send('POST', '/api/v1/devices/$id/commands', body: {'type': type});
 
+  /// Pede uma captura de tela da TV [id] (o servidor responde 202). Devolve
+  /// o `requestId` do pedido. `409 device_offline` e `429
+  /// too_many_requests` viram [ApiException] com mensagem em português.
+  Future<String> requestScreenshot(String id) async {
+    final json = await _send(
+      'POST',
+      '/api/v1/devices/$id/commands',
+      body: {'type': DeviceCommands.screenshot},
+    );
+    return json['requestId'] as String? ?? '';
+  }
+
+  /// Endereço da última captura da TV [id]. [capturedAt] entra como
+  /// parâmetro só para o navegador não reaproveitar a imagem anterior.
+  Uri screenshotUrl(String id, {DateTime? capturedAt}) => _baseUri.resolve(
+        Uri(
+          path: '/api/v1/devices/$id/screenshot',
+          queryParameters: capturedAt == null
+              ? null
+              : {'t': '${capturedAt.millisecondsSinceEpoch}'},
+        ).toString(),
+      );
+
+  /// Momento da última captura da TV [id] (cabeçalho `X-Captured-At`), ou
+  /// `null` se o servidor não tem nenhuma (404).
+  Future<DateTime?> getScreenshotInfo(String id) async {
+    final http.Response response;
+    try {
+      response = await _client.get(screenshotUrl(id));
+    } on http.ClientException {
+      return null;
+    }
+    if (response.statusCode != 200) return null;
+    return DateTime.tryParse(response.headers['x-captured-at'] ?? '');
+  }
+
+  /// Log de auditoria, do mais novo para o mais antigo. [before] pagina pelo
+  /// `id` da última linha já carregada.
+  Future<List<AuditEntry>> listAudit({int limit = 100, int? before}) async {
+    final path = Uri(
+      path: '/api/v1/audit',
+      queryParameters: {
+        'limit': '$limit',
+        if (before != null) 'before': '$before',
+      },
+    ).toString();
+    final json = await _send('GET', path);
+    final entries = json['entries'];
+    if (entries is! List) return const [];
+    return [
+      for (final item in entries)
+        if (item is Map<String, Object?>) AuditEntry.fromJson(item),
+    ];
+  }
+
   Future<String> _sendCredentials(
     String path,
     String username,
@@ -407,6 +462,8 @@ class ApiClient {
     'invalid_days': 'Escolha ao menos um dia da semana.',
     'invalid_time': 'Horário inválido. Use HH:MM, de 00:00 a 23:59.',
     'invalid_priority': 'A prioridade deve ser um número de 0 a 100.',
+    'device_offline': 'A TV está offline.',
+    'too_many_requests': 'Aguarde alguns segundos para capturar de novo.',
     'unknown_playlist': 'A playlist não existe mais.',
   };
 

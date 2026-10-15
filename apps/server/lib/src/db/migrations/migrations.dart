@@ -3,6 +3,7 @@ import 'm0001_init.dart';
 import 'm0002_media.dart';
 import 'm0003_playlists.dart';
 import 'm0004_groups_schedules.dart';
+import 'm0005_audit_log.dart';
 
 /// Todas as migrações do esquema, em ordem.
 ///
@@ -13,4 +14,5 @@ const migrations = <Migration>[
   migration0002,
   migration0003,
   migration0004,
+  migration0005,
 ];

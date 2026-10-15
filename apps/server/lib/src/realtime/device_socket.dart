@@ -11,6 +11,7 @@ import '../devices/devices.dart';
 import '../logging.dart';
 import 'content_sync.dart';
 import 'device_hub.dart';
+import 'screenshots.dart';
 
 final _log = Logger('realtime.device');
 
@@ -28,21 +29,30 @@ class RealtimeTimeouts {
   final Duration silence;
 }
 
+/// Tamanho máximo de uma mensagem da TV (texto): base64 de uma captura de
+/// [maxScreenshotBytes] (cerca de 2,7 MiB) mais o envelope. Passou disso, a
+/// conexão é fechada com [WsCloseCodes.protocolError] (o `dart:io` não deixa
+/// usar o 1009); a TV reconecta sozinha.
+const maxDeviceMessageChars = 3 * 1024 * 1024;
+
 /// `GET /ws/device`: conexão em tempo real de cada TV.
 class DeviceSocket {
   DeviceSocket({
     required DeviceStore devices,
     required DeviceHub hub,
     required ContentSync sync,
+    required ScreenshotStore screenshots,
     RealtimeTimeouts timeouts = const RealtimeTimeouts(),
   }) : _devices = devices,
        _hub = hub,
        _sync = sync,
+       _screenshots = screenshots,
        _timeouts = timeouts;
 
   final DeviceStore _devices;
   final DeviceHub _hub;
   final ContentSync _sync;
+  final ScreenshotStore _screenshots;
   final RealtimeTimeouts _timeouts;
 
   /// Handler da rota; autentica pelo cabeçalho antes do upgrade.
@@ -103,6 +113,9 @@ class DeviceSocket {
     void onData(Object? data) {
       if (closed) return;
       if (data is! String) return fail(WsCloseCodes.protocolError, 'text only');
+      if (data.length > maxDeviceMessageChars) {
+        return fail(WsCloseCodes.protocolError, 'message too big');
+      }
       final Envelope envelope;
       try {
         envelope = Envelope.decode(data);
@@ -159,6 +172,10 @@ class DeviceSocket {
               LogEvent('ack inválido ignorado', {'deviceId': device.id}),
             );
           }
+        } else if (envelope.type == MessageTypes.screenshotResult) {
+          _onScreenshotResult(device.id, envelope);
+        } else if (envelope.type == MessageTypes.error) {
+          _onDeviceError(device.id, envelope);
         } else {
           _log.fine(
             LogEvent('mensagem ignorada', {
@@ -184,6 +201,56 @@ class DeviceSocket {
       },
       cancelOnError: false,
     );
+  }
+
+  void _onScreenshotResult(String deviceId, Envelope envelope) {
+    final String? reason;
+    DateTime? capturedAt;
+    try {
+      final result = ScreenshotResult.fromJson(envelope.payload);
+      reason = _screenshots.accept(deviceId, result);
+      capturedAt = _screenshots.latest(deviceId)?.capturedAt;
+    } on ProtocolException {
+      _log.warning(
+        LogEvent('captura descartada', {
+          'deviceId': deviceId,
+          'reason': 'invalid_payload',
+        }),
+      );
+      return;
+    }
+    if (reason != null || capturedAt == null) {
+      _log.warning(
+        LogEvent('captura descartada', {
+          'deviceId': deviceId,
+          'reason': reason ?? 'unknown',
+        }),
+      );
+      return;
+    }
+    _hub.publish(
+      MessageTypes.deviceScreenshot,
+      DeviceScreenshotEvent(
+        deviceId: deviceId,
+        capturedAt: capturedAt,
+      ).toJson(),
+    );
+    _log.info(LogEvent('captura recebida', {'deviceId': deviceId}));
+  }
+
+  void _onDeviceError(String deviceId, Envelope envelope) {
+    try {
+      final error = ErrorPayload.fromJson(envelope.payload);
+      _screenshots.dropByRef(deviceId, error.ref);
+      _log.info(
+        LogEvent('erro informado pela TV', {
+          'deviceId': deviceId,
+          'code': error.code,
+        }),
+      );
+    } on ProtocolException {
+      _log.fine(LogEvent('erro inválido ignorado', {'deviceId': deviceId}));
+    }
   }
 }
 

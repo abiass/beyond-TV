@@ -29,6 +29,7 @@ void main() {
 
     expect(tables, [
       'admins',
+      'audit_log',
       'devices',
       'groups',
       'media',
@@ -141,8 +142,8 @@ void main() {
           [playlistId, position, mediaId],
         );
 
-    test('está na versão 4', () {
-      expect(db.userVersion, 4);
+    test('está na versão 5', () {
+      expect(db.userVersion, 5);
     });
 
     test('apagar a mídia remove os itens das playlists', () {
@@ -214,8 +215,8 @@ void main() {
       [id, playlistId, deviceId, groupId, days, start, end, priority],
     );
 
-    test('está na versão 4', () {
-      expect(db.userVersion, 4);
+    test('está na versão 5', () {
+      expect(db.userVersion, 5);
     });
 
     test('exige exatamente um alvo', () {

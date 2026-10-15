@@ -574,13 +574,13 @@ verde.
 | 8.4 | `feat(dashboard): adiciona telas de grupos e agenda semanal` | ✅ |
 | 8.5 | `test: cobre resolução de agenda (sobreposição, virada de dia)` | ✅ |
 
-### Fase 9 — Operação remota ⬜
-| # | Commit |
-|---|--------|
-| 9.1 | `feat(tv): adiciona captura de tela sob demanda` |
-| 9.2 | `feat(dashboard): exibe preview da tela de cada TV` |
-| 9.3 | `feat(tv): adiciona menu oculto com informações e desparear` |
-| 9.4 | `feat(server): registra log de auditoria de ações do admin` |
+### Fase 9 — Operação remota ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 9.1 | `feat(tv): adiciona captura de tela sob demanda` | ✅ |
+| 9.2 | `feat(dashboard): exibe preview da tela de cada TV` | ✅ |
+| 9.3 | `feat(tv): adiciona menu oculto com informações e desparear` | ✅ |
+| 9.4 | `feat(server): registra log de auditoria de ações do admin` | ✅ |
 
 ### Fase 10 — Robustez Android TV ⬜
 | # | Commit |

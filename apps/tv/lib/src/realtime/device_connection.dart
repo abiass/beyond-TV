@@ -6,6 +6,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../device/credentials.dart';
 import '../device/device_info_source.dart';
+import '../remote/app_log.dart';
 import '../server/discovery.dart';
 import '../server/server_address.dart';
 import 'backoff.dart';
@@ -296,6 +297,7 @@ class DeviceConnection extends ChangeNotifier {
 
   void _setStatus(ConnectionStatus status) {
     if (_disposed) return;
+    if (status != _status) appLog('Conexão: ${status.name}');
     _status = status;
     notifyListeners();
   }

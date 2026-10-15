@@ -1,6 +1,7 @@
 /// Servidor local do Beyond TV.
 library;
 
+export 'src/api/audit_api.dart';
 export 'src/api/auth_api.dart';
 export 'src/api/devices_api.dart';
 export 'src/api/groups_api.dart';
@@ -10,6 +11,7 @@ export 'src/api/playlists_api.dart';
 export 'src/api/schedules_api.dart';
 export 'src/api/setup_api.dart';
 export 'src/app.dart';
+export 'src/audit/audit_log.dart';
 export 'src/auth/admins.dart';
 export 'src/auth/passwords.dart';
 export 'src/auth/sessions.dart';
@@ -35,4 +37,5 @@ export 'src/realtime/admin_socket.dart';
 export 'src/realtime/content_sync.dart';
 export 'src/realtime/device_hub.dart';
 export 'src/realtime/device_socket.dart';
+export 'src/realtime/screenshots.dart';
 export 'src/schedules/schedule_store.dart';

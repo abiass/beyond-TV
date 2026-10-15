@@ -16,6 +16,7 @@ import '../widgets/content_picker.dart';
 import 'devices_controller.dart';
 import 'format_relative.dart';
 import 'remove_device_dialog.dart';
+import 'screenshot_card.dart';
 import 'rename_device_dialog.dart';
 
 enum _Action { rename, remove }
@@ -96,6 +97,8 @@ class DeviceDetailPage extends ConsumerWidget {
               _SchedulesCard(device: device),
               const SizedBox(height: 12),
               _CommandsCard(device: device),
+              const SizedBox(height: 12),
+              ScreenshotCard(device: device),
             ],
           ),
         ),

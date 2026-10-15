@@ -5,6 +5,7 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import 'api/audit_api.dart';
 import 'api/auth_api.dart';
 import 'api/devices_api.dart';
 import 'api/groups_api.dart';
@@ -13,6 +14,7 @@ import 'api/pairing_api.dart';
 import 'api/playlists_api.dart';
 import 'api/schedules_api.dart';
 import 'api/setup_api.dart';
+import 'audit/audit_log.dart';
 import 'auth/admins.dart';
 import 'auth/passwords.dart';
 import 'auth/sessions.dart';
@@ -31,6 +33,7 @@ import 'realtime/admin_socket.dart';
 import 'realtime/content_sync.dart';
 import 'realtime/device_hub.dart';
 import 'realtime/device_socket.dart';
+import 'realtime/screenshots.dart';
 import 'schedules/schedule_store.dart';
 
 /// Versão do servidor exposta em `/health`.
@@ -87,6 +90,8 @@ Handler buildHandler({
   final groups = GroupStore(db, clock: clock);
   final schedules = ScheduleStore(db, clock: clock);
   final files = MediaFiles(mediaDir);
+  final screenshots = ScreenshotStore(clock: clock);
+  final audit = AuditLog(db, clock: clock);
   final hub = DeviceHub(
     devices: devices,
     media: media,
@@ -120,7 +125,9 @@ Handler buildHandler({
     playlists: playlists,
     hub: hub,
     sync: sync,
+    screenshots: screenshots,
   ).addRoutes(router);
+  AuditApi(sessions: sessions, audit: audit).addRoutes(router);
   MediaApi(
     sessions: sessions,
     media: media,
@@ -161,6 +168,7 @@ Handler buildHandler({
         devices: devices,
         hub: hub,
         sync: sync,
+        screenshots: screenshots,
         timeouts: timeouts,
       ).handle,
     )
@@ -168,6 +176,7 @@ Handler buildHandler({
 
   return const Pipeline()
       .addMiddleware(requestLogger())
+      .addMiddleware(auditLog(audit, sessions))
       .addMiddleware(errorHandler())
       .addMiddleware(originCheck())
       .addHandler(router.call);

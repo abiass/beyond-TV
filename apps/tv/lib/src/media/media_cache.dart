@@ -15,6 +15,14 @@ final class MediaCacheException implements Exception {
   String toString() => 'MediaCacheException: $message';
 }
 
+/// Tamanho do cache de mídia.
+final class CacheStats {
+  const CacheStats({required this.files, required this.bytes});
+
+  final int files;
+  final int bytes;
+}
+
 /// Cache de arquivos de mídia em disco, nomeados pelo sha256.
 ///
 /// O arquivo só aparece com o nome final depois de baixado por inteiro e
@@ -121,6 +129,37 @@ class MediaCache {
         // Sumiu no meio do caminho; nada a fazer.
       }
     }
+  }
+
+  /// Apaga todos os arquivos do cache. E/S síncrona: a pasta é pequena e
+  /// assim o desparear não depende do relógio de testes de widget.
+  Future<void> clear() async {
+    if (!root.existsSync()) return;
+    for (final entity in root.listSync()) {
+      try {
+        entity.deleteSync(recursive: true);
+      } on FileSystemException {
+        // Sumiu no meio do caminho; nada a fazer.
+      }
+    }
+  }
+
+  /// Quantos arquivos há no cache e quanto ocupam (sem os `.part`).
+  Future<CacheStats> stats() async {
+    var files = 0;
+    var bytes = 0;
+    if (root.existsSync()) {
+      for (final entity in root.listSync()) {
+        if (entity is! File || entity.path.endsWith('.part')) continue;
+        try {
+          bytes += entity.lengthSync();
+          files++;
+        } on FileSystemException {
+          // Sumiu no meio do caminho; não conta.
+        }
+      }
+    }
+    return CacheStats(files: files, bytes: bytes);
   }
 
   void close() => _client.close();

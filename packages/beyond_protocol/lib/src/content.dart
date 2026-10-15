@@ -155,8 +155,9 @@ abstract final class DeviceCommands {
   static const reload = 'reload';
   static const identify = 'identify';
   static const unpair = 'unpair';
+  static const screenshot = 'screenshot';
 
-  static const all = {reload, identify, unpair};
+  static const all = {reload, identify, unpair, screenshot};
 }
 
 /// Payload do `cmd.identify`: a TV mostra [name] em fonte gigante.

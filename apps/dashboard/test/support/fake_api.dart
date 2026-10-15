@@ -650,6 +650,46 @@ class FakeApi implements ApiClient {
     if (type == DeviceCommands.unpair) devices.remove(device);
   }
 
+  /// Pedidos de captura, como ids de TV.
+  final screenshotRequests = <String>[];
+
+  /// Erro que [requestScreenshot] devolve, se preenchido.
+  ApiException? screenshotError;
+
+  /// Última captura de cada TV, como `id -> momento`.
+  final screenshotAt = <String, DateTime>{};
+
+  @override
+  Future<String> requestScreenshot(String id) async {
+    _maybeFail();
+    if (screenshotError case final error?) throw error;
+    screenshotRequests.add(id);
+    return 'req-${screenshotRequests.length}';
+  }
+
+  @override
+  Uri screenshotUrl(String id, {DateTime? capturedAt}) =>
+      ApiClient(baseUri: baseUri).screenshotUrl(id, capturedAt: capturedAt);
+
+  @override
+  Future<DateTime?> getScreenshotInfo(String id) async => screenshotAt[id];
+
+  /// Linhas de auditoria, da mais nova para a mais antiga.
+  final audit = <AuditEntry>[];
+
+  /// Chamadas de [listAudit], como `(limit, before)`.
+  final auditCalls = <(int, int?)>[];
+
+  @override
+  Future<List<AuditEntry>> listAudit({int limit = 100, int? before}) async {
+    _maybeFail();
+    auditCalls.add((limit, before));
+    return [
+      for (final e in audit)
+        if (before == null || e.id < before) e,
+    ].take(limit).toList();
+  }
+
   @override
   Future<PairingStatus> pairingStatus(String code) async {
     _maybeFail();

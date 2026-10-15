@@ -498,6 +498,75 @@ afetá-lo muda (conteúdo, grupo, agendamento, playlist ou mídia) e só manda
   minuto (o relógio pode ser ajustado). Ao mudar o conjunto de itens, a
   rotação recomeça do primeiro.
 
+## Operação remota (fase 9)
+
+### Captura de tela
+
+```mermaid
+sequenceDiagram
+    participant Painel
+    participant Servidor
+    participant TV
+    Painel->>Servidor: POST /devices/:id/commands { type: "screenshot" }
+    Servidor-->>Painel: 202 { requestId }
+    Servidor->>TV: cmd.screenshot { requestId }
+    TV->>Servidor: screenshot.result { requestId, mime, data }
+    Servidor-->>Painel: device.screenshot { deviceId, capturedAt }
+    Painel->>Servidor: GET /devices/:id/screenshot
+```
+
+| Método | Rota | Auth | Resposta |
+|--------|------|------|----------|
+| POST | `/devices/:id/commands` `{ "type": "screenshot" }` | admin | `202 { "requestId": "…" }`. `409 device_offline` com a TV desconectada; `429 too_many_requests` se houve pedido para a mesma TV há menos de 5 s (`screenshotCooldown`). |
+| GET | `/devices/:id/screenshot` | admin | `200` com a última captura (`Content-Type` = `mime`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Captured-At` em ISO 8601). `404 no_screenshot` se não há. |
+
+- A TV responde com `screenshot.result` (`ScreenshotResult`: `requestId`,
+  `mime` e `data` em base64) ou com `error`
+  (`{ "ref": "<id do cmd.screenshot>", "code": "capture_failed", "message" }`).
+- O servidor só aceita um resultado se o `requestId` é de um pedido pendente
+  daquela TV (o pedido expira em 30 s), o `mime` está em `screenshotMimes`,
+  o tamanho decodificado é até 2 MiB (`maxScreenshotBytes`) e os primeiros
+  bytes batem com o `mime`. Fora disso, descarta e registra um aviso no log,
+  sem o conteúdo.
+- A captura fica **só na memória** do servidor, uma por TV, e some ao
+  reiniciar ou ao remover a TV. Ela pode mostrar dados reais dos dashboards
+  exibidos, por isso nunca vai para o disco nem para o log.
+- O painel recebe `device.screenshot` (`DeviceScreenshotEvent`) e busca a
+  imagem. Se nada chega em 15 s, mostra que a TV não respondeu.
+
+**Na TV:** a captura usa `PixelCopy` da janela da activity (canal
+`beyond_tv/screenshot`, método `capture`, argumento `maxWidth`), que inclui
+WebView e vídeo. Se o canal falhar, usa a árvore do Flutter
+(`RepaintBoundary`), que pode sair sem o conteúdo de WebView e vídeo. A
+imagem é reduzida a 1280 px de largura (`screenshotMaxWidth`) e vai em JPEG.
+
+### Menu oculto da TV
+
+Abre com **⬆ ⬆ ⬇ ⬇** em até 3 s ou segurando **OK** por 2 s. Mostra
+versão do app, id da TV, servidor, estado da conexão, item exibido,
+`revision` do manifesto, arquivos em cache e as últimas 50 linhas de log do
+app. Ações: **Recarregar**, **Desparear** (com confirmação) e **Fechar**
+(também com Voltar).
+
+Desparear pela TV usa a rota abaixo e, mesmo sem servidor, apaga as
+credenciais e o cache e volta ao pareamento.
+
+| Método | Rota | Auth | Resposta |
+|--------|------|------|----------|
+| DELETE | `/device` | TV (`Authorization: Bearer`) | `204`. Remove a TV como `DELETE /devices/:id`: publica `device.removed` e fecha o WebSocket com `4401`. |
+
+### Log de auditoria
+
+Toda requisição que muda algo (`POST`, `PUT`, `PATCH` e `DELETE` em
+`/api/v1/`) vira uma linha em `audit_log`: momento, método, caminho (sem
+query string), status, admin da sessão (se houver) e IP. Corpo, query,
+cookies e cabeçalhos **nunca** são gravados. Linhas com mais de 90 dias ou
+além das 10 000 mais recentes são apagadas.
+
+| Método | Rota | Auth | Resposta |
+|--------|------|------|----------|
+| GET | `/audit?limit=100&before=<id>` | admin | `200 { "entries": [AuditEntry…] }`, da mais nova para a mais antiga. `limit` de 1 a 500 (padrão 100); `before` pagina pelo `id`. |
+
 ## Saúde
 
 `GET /health` (sem auth) responde

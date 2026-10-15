@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../remote/app_log.dart';
 
 /// Superfície de vídeo mudo, sem controles e sem repetição.
 abstract interface class VideoSurfaceController {
@@ -115,7 +116,7 @@ class _VideoItemViewState extends State<VideoItemView> {
       setState(() => _ready = true);
       await _surface.play();
     } on Object catch (e) {
-      debugPrint('Falha ao abrir o vídeo: $e');
+      appLog('Falha ao abrir o vídeo: $e');
       if (!_disposed) _errorTimer = Timer(widget.errorDelay, _complete);
     }
   }

@@ -21,6 +21,8 @@ import 'server/discovery.dart';
 import 'server/server_address.dart';
 import 'server/tv_api.dart';
 import 'theme.dart';
+import 'remote/app_log.dart';
+import 'remote/screen_capturer.dart';
 
 class TvApp extends StatelessWidget {
   TvApp({
@@ -37,13 +39,23 @@ class TvApp extends StatelessWidget {
     this.mediaRoot = _defaultMediaRoot,
     this.mediaClient,
     this.now,
-  })  : discovery = discovery ?? const UdpServerDiscovery(),
+    ScreenCapturer? screenCapturer,
+  })  : _screenCapturer = screenCapturer,
+        discovery = discovery ?? const UdpServerDiscovery(),
         api = api ?? TvApi(),
         deviceInfo = deviceInfo ?? const PlatformDeviceInfoSource(),
         credentials = credentials ?? const SecureCredentialStore(),
         connector = connector ?? ioConnector,
         manifestStore = manifestStore ?? FileManifestStore(),
         webPlayer = webPlayer ?? defaultWebPlayer;
+
+  final ScreenCapturer? _screenCapturer;
+
+  /// Raiz da árvore do app, para a captura de tela de reserva.
+  final GlobalKey _boundaryKey = GlobalKey();
+
+  late final ScreenCapturer screenCapturer =
+      _screenCapturer ?? PlatformScreenCapturer(boundaryKey: _boundaryKey);
 
   final ServerDiscovery discovery;
   final TvApi api;
@@ -77,7 +89,7 @@ class TvApp extends StatelessWidget {
         client: mediaClient?.call() ?? http.Client(),
       );
     } on Object catch (e) {
-      debugPrint('Cache de mídia indisponível: $e');
+      appLog('Cache de mídia indisponível: $e');
       return null;
     }
   }
@@ -91,6 +103,10 @@ class TvApp extends StatelessWidget {
       title: 'Beyond TV',
       debugShowCheckedModeBanner: false,
       theme: buildTvTheme(),
+      builder: (context, child) => RepaintBoundary(
+        key: _boundaryKey,
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: _StartupPage(app: this),
     );
   }
@@ -119,6 +135,8 @@ class TvApp extends StatelessWidget {
       connection: connection,
       credentials: credentials,
       cache: cache,
+      api: api,
+      screenCapturer: screenCapturer,
       now: now,
     );
     return PlayerPage(

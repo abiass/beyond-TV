@@ -111,4 +111,25 @@ void main() {
     expect(requests, isEmpty);
     expect(Directory('${dir.path}/media').existsSync(), isFalse);
   });
+
+  test('stats conta os arquivos prontos e ignora os .part', () async {
+    expect((await cache.stats()).files, 0);
+
+    await cache.ensure(_item(), base: _base, token: 't');
+    File('${dir.path}/media/${'c' * 64}.part').writeAsStringSync('parcial');
+
+    final stats = await cache.stats();
+    expect(stats.files, 1);
+    expect(stats.bytes, _bytes.length);
+  });
+
+  test('clear apaga tudo, inclusive os .part', () async {
+    await cache.ensure(_item(), base: _base, token: 't');
+    File('${dir.path}/media/${'c' * 64}.part').writeAsStringSync('parcial');
+
+    await cache.clear();
+
+    expect(files(), isEmpty);
+    expect((await cache.stats()).files, 0);
+  });
 }

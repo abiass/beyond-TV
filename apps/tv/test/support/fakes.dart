@@ -6,6 +6,7 @@ import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:beyond_tv/src/device/credentials.dart';
 import 'package:beyond_tv/src/player/web_player.dart';
 import 'package:beyond_tv/src/device/device_info_source.dart';
+import 'package:beyond_tv/src/remote/screen_capturer.dart';
 import 'package:beyond_tv/src/server/discovery.dart';
 import 'package:beyond_tv/src/server/server_address.dart';
 import 'package:beyond_tv/src/server/tv_api.dart';
@@ -128,3 +129,20 @@ WebPlayerBuilder fakeWebPlayer(FakePlayerLog log) => (context, url, onCreated) {
 /// Pasta de mídia que nunca é criada: os testes de app não baixam nada.
 Future<Directory> fakeMediaRoot() async =>
     Directory('${Directory.systemTemp.path}/beyond_tv_test_no_media');
+
+/// Capturador falso: devolve [image] ou lança [error], e registra o
+/// `maxWidth` pedido.
+class FakeScreenCapturer implements ScreenCapturer {
+  FakeScreenCapturer({this.image, this.error});
+
+  CapturedImage? image;
+  Object? error;
+  final List<int> widths = [];
+
+  @override
+  Future<CapturedImage> capture({required int maxWidth}) async {
+    widths.add(maxWidth);
+    if (error != null) throw error!;
+    return image!;
+  }
+}

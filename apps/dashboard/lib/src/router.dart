@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'audit/audit_page.dart';
 import 'auth/auth_controller.dart';
 import 'devices/device_detail_page.dart';
 import 'groups/group_detail_page.dart';
@@ -35,6 +36,8 @@ abstract final class Routes {
 
   /// Detalhes do grupo [id].
   static String group(int id) => '/grupos/$id';
+
+  static const audit = '/auditoria';
 
   static const schedule = '/agenda';
 
@@ -108,6 +111,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => GroupDetailPage(
           id: int.tryParse(state.pathParameters['id']!) ?? -1,
         ),
+      ),
+      GoRoute(
+        path: Routes.audit,
+        builder: (context, state) => const AuditPage(),
       ),
       GoRoute(
         path: Routes.schedule,

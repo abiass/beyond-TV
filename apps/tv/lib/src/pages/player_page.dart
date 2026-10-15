@@ -12,6 +12,7 @@ import '../player/playlist_rotation.dart';
 import '../player/video_player_view.dart';
 import '../player/web_player.dart';
 import '../realtime/device_connection.dart';
+import '../remote/hidden_menu.dart';
 import 'paired_page.dart';
 
 /// Tela da TV pareada: o item da rotação em tela cheia (site, imagem ou
@@ -160,29 +161,33 @@ class _PlayerPageState extends State<PlayerPage> {
     }
 
     final name = _content.identifyName;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        body,
-        if (name != null)
-          Positioned.fill(
-            child: Container(
-              color: const Color(0xCC000000),
-              alignment: Alignment.center,
-              padding: const EdgeInsets.all(48),
-              child: Text(
-                name,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 120,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  decoration: TextDecoration.none,
+    return HiddenMenuHost(
+      content: _content,
+      connection: _connection,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          body,
+          if (name != null)
+            Positioned.fill(
+              child: Container(
+                color: const Color(0xCC000000),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.all(48),
+                child: Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 120,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    decoration: TextDecoration.none,
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 

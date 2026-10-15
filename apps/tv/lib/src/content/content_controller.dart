@@ -7,10 +7,13 @@ import 'package:flutter/foundation.dart';
 import '../device/credentials.dart';
 import '../media/media_cache.dart';
 import '../player/web_player.dart';
+import '../server/tv_api.dart';
 import '../realtime/backoff.dart';
 import '../realtime/device_connection.dart';
 import 'active_content.dart';
 import 'manifest_store.dart';
+import '../remote/app_log.dart';
+import '../remote/screen_capturer.dart';
 
 /// Guarda o que a TV exibe e executa as mensagens do servidor:
 /// `content.sync`, `cmd.reload`, `cmd.identify` e `cmd.unpair`.
@@ -21,6 +24,8 @@ class ContentController extends ChangeNotifier {
     required this.connection,
     this.credentials,
     this.cache,
+    this.api,
+    this.screenCapturer,
     this.backoffFactory = Backoff.new,
     this.wait = Future.delayed,
     DateTime Function()? now,
@@ -36,6 +41,12 @@ class ContentController extends ChangeNotifier {
 
   /// Cache dos arquivos de imagem e vídeo; sem ele só sites são exibidos.
   final MediaCache? cache;
+
+  /// Usada em [unpairSelf] para avisar o servidor.
+  final TvApi? api;
+
+  /// Captura de tela do `cmd.screenshot`; sem ele a TV responde com erro.
+  final ScreenCapturer? screenCapturer;
 
   /// Espera entre tentativas de download; os testes usam esperas curtas.
   final Backoff Function() backoffFactory;
@@ -107,6 +118,12 @@ class ContentController extends ChangeNotifier {
   File? fileFor(ContentItem item) =>
       item.sha256 == null ? null : cache?.cached(item.sha256!);
 
+  /// Recarrega o item em exibição (o mesmo que o `cmd.reload`).
+  Future<void> reload() async => _player?.reload();
+
+  /// Tamanho do cache de mídia, ou `null` sem cache.
+  Future<CacheStats?> cacheStats() async => cache?.stats();
+
   /// Controle do player aberto; `null` no estado vazio.
   set player(WebPlayerController? value) => _player = value;
 
@@ -136,7 +153,7 @@ class ContentController extends ChangeNotifier {
     try {
       await store.clear();
     } on Object catch (e) {
-      debugPrint('Falha ao apagar o manifesto: $e');
+      appLog('Falha ao apagar o manifesto: $e');
     }
   }
 
@@ -151,6 +168,8 @@ class ContentController extends ChangeNotifier {
         _onIdentify(envelope);
       case MessageTypes.cmdUnpair:
         unawaited(_onUnpair(envelope));
+      case MessageTypes.cmdScreenshot:
+        unawaited(_onScreenshot(envelope));
     }
   }
 
@@ -159,7 +178,7 @@ class ContentController extends ChangeNotifier {
     try {
       incoming = ContentManifest.fromJson(envelope.payload);
     } on ProtocolException catch (e) {
-      debugPrint('content.sync inválido: $e');
+      appLog('content.sync inválido: $e');
       return;
     }
     _synced = true;
@@ -184,6 +203,7 @@ class ContentController extends ChangeNotifier {
             ),
         ],
       );
+      appLog('Conteúdo sincronizado: revisão ${safe.revision}.');
       _setManifest(safe);
       _startMediaSync(safe);
       notifyListeners();
@@ -241,12 +261,13 @@ class ContentController extends ChangeNotifier {
           );
         } on Object catch (e) {
           // Nunca inclui o token na mensagem.
-          debugPrint('Falha ao baixar a mídia ${pending[sha]!.mediaId}: $e');
+          appLog('Falha ao baixar a mídia ${pending[sha]!.mediaId}: $e');
           continue;
         }
         if (stale()) return;
         pending.remove(sha);
         _ready.add(sha);
+        appLog('Mídia baixada: ${pending.length} pendente(s).');
         notifyListeners();
       }
       if (first) {
@@ -254,7 +275,7 @@ class ContentController extends ChangeNotifier {
         try {
           await cache.prune(shas);
         } on Object catch (e) {
-          debugPrint('Falha ao limpar o cache de mídia: $e');
+          appLog('Falha ao limpar o cache de mídia: $e');
         }
       }
       if (pending.isEmpty || stale()) return;
@@ -267,7 +288,7 @@ class ContentController extends ChangeNotifier {
     try {
       await store.save(manifest);
     } on Object catch (e) {
-      debugPrint('Falha ao salvar o manifesto: $e');
+      appLog('Falha ao salvar o manifesto: $e');
     }
   }
 
@@ -277,7 +298,7 @@ class ContentController extends ChangeNotifier {
     try {
       payload = IdentifyPayload.fromJson(envelope.payload);
     } on ProtocolException catch (e) {
-      debugPrint('cmd.identify inválido: $e');
+      appLog('cmd.identify inválido: $e');
       return;
     }
     _identifyTimer?.cancel();
@@ -289,14 +310,91 @@ class ContentController extends ChangeNotifier {
     });
   }
 
+  Future<void> _onScreenshot(Envelope envelope) async {
+    final ScreenshotRequest request;
+    try {
+      request = ScreenshotRequest.fromJson(envelope.payload);
+    } on ProtocolException catch (e) {
+      appLog('cmd.screenshot inválido: $e');
+      return;
+    }
+    void fail(String message) {
+      appLog('Captura de tela falhou: $message');
+      if (_disposed) return;
+      connection.send(
+        Envelope.create(
+          MessageTypes.error,
+          payload: ErrorPayload(
+            ref: envelope.id,
+            code: 'capture_failed',
+            message: message,
+          ).toJson(),
+        ),
+      );
+    }
+
+    final capturer = screenCapturer;
+    if (capturer == null) return fail('Captura indisponível nesta TV.');
+    final CapturedImage image;
+    try {
+      image = await capturer.capture(maxWidth: screenshotMaxWidth);
+    } on Object catch (e) {
+      return fail('Não foi possível capturar a tela (${e.runtimeType}).');
+    }
+    if (!screenshotMimes.contains(image.mime)) {
+      return fail('Formato de imagem não suportado.');
+    }
+    if (image.bytes.length > maxScreenshotBytes) {
+      return fail('Imagem grande demais.');
+    }
+    if (_disposed) return;
+    connection.send(
+      Envelope.create(
+        MessageTypes.screenshotResult,
+        payload: ScreenshotResult.fromBytes(
+          requestId: request.requestId,
+          mime: image.mime,
+          bytes: image.bytes,
+        ).toJson(),
+      ),
+    );
+    appLog('Captura de tela enviada.');
+  }
+
   Future<void> _onUnpair(Envelope envelope) async {
     _ack(envelope);
+    await _unpairLocally();
+  }
+
+  /// A pedido do menu da TV: avisa o servidor (se responder em poucos
+  /// segundos) e depois sempre apaga tudo e volta ao pareamento.
+  Future<void> unpairSelf() async {
+    final api = this.api;
+    if (api != null) {
+      final current = connection.credentials;
+      try {
+        await api.unpairSelf(current.server, current.deviceToken);
+      } on Object catch (e) {
+        appLog('Servidor não confirmou o desparear: ${e.runtimeType}');
+      }
+    }
+    await _unpairLocally();
+  }
+
+  /// Apaga credenciais, manifesto salvo e cache; a TV sai do servidor.
+  Future<void> _unpairLocally() async {
+    _mediaRun++;
     try {
       await credentials?.clear();
     } on Object catch (e) {
-      debugPrint('Falha ao apagar as credenciais: $e');
+      appLog('Falha ao apagar as credenciais: $e');
     }
     await _clearManifest();
+    try {
+      await cache?.clear();
+    } on Object catch (e) {
+      appLog('Falha ao apagar o cache de mídia: $e');
+    }
     // Sai agora, sem esperar o 4401 que o servidor manda em seguida.
     connection.markUnauthorized();
   }
