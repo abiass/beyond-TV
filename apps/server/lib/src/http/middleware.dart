@@ -33,6 +33,48 @@ Middleware requestLogger() =>
       return response;
     };
 
+/// Recusa com `403` requisições que alteram dados (`POST`, `PUT`, `PATCH`,
+/// `DELETE`...) vindas de outra origem.
+///
+/// É a defesa contra CSRF junto com o cookie `SameSite=Strict`: o navegador
+/// sempre manda o `Origin` nesses métodos, e ele tem que bater com o `Host`.
+/// Clientes que não são navegador (como o app da TV) não mandam `Origin` e
+/// passam direto; eles se autenticam por token, não por cookie.
+Middleware originCheck() =>
+    (inner) => (request) {
+      final origin = request.headers['origin'];
+      if (origin != null &&
+          !_safeMethods.contains(request.method) &&
+          !isSameOrigin(origin, request)) {
+        throw const ApiException(
+          403,
+          'forbidden_origin',
+          'Requisição recusada: origem diferente do servidor.',
+        );
+      }
+      return inner(request);
+    };
+
+const _safeMethods = {'GET', 'HEAD', 'OPTIONS'};
+
+/// Indica se o cabeçalho `Origin` [origin] aponta para o próprio servidor.
+bool isSameOrigin(String origin, Request request) {
+  final host = request.headers['host'];
+  final scheme = request.requestedUri.scheme;
+  final originUri = Uri.tryParse(origin);
+  if (host == null ||
+      originUri == null ||
+      !originUri.hasAuthority ||
+      originUri.scheme != scheme) {
+    return false;
+  }
+  // Interpreta o Host com o esquema do servidor para normalizar a porta padrão.
+  final hostUri = Uri.tryParse('$scheme://$host');
+  return hostUri != null &&
+      hostUri.host == originUri.host &&
+      hostUri.port == originUri.port;
+}
+
 /// Transforma exceções em respostas JSON.
 ///
 /// [ApiException] vira a resposta que ela descreve. Qualquer outro erro é

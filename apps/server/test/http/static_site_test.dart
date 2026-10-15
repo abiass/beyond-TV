@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:beyond_server/server.dart';
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
+import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
 Future<Response> _get(Handler handler, String path) => Future.sync(
@@ -13,8 +14,10 @@ Future<Response> _get(Handler handler, String path) => Future.sync(
 void main() {
   late Directory root;
   late String webDir;
+  late Database db;
 
   setUp(() async {
+    db = openDatabase();
     root = await Directory.systemTemp.createTemp('beyond_web_');
     webDir = p.join(root.path, 'web');
     await Directory(p.join(webDir, 'assets')).create(recursive: true);
@@ -23,12 +26,21 @@ void main() {
     await File(p.join(root.path, 'segredo.txt')).writeAsString('não sirva');
   });
 
-  tearDown(() => root.delete(recursive: true));
+  tearDown(() async {
+    db.close();
+    await root.delete(recursive: true);
+  });
 
   group('com o dashboard compilado', () {
     late Handler handler;
 
-    setUp(() => handler = buildHandler(webDir: webDir));
+    setUp(
+      () => handler = buildHandler(
+        db: db,
+        mediaDir: p.join(root.path, 'media'),
+        webDir: webDir,
+      ),
+    );
 
     test('serve o index.html na raiz', () async {
       final response = await _get(handler, '/');
@@ -88,7 +100,11 @@ void main() {
 
   group('sem o dashboard compilado', () {
     test('explica como compilar ao abrir a raiz', () async {
-      final handler = buildHandler(webDir: p.join(root.path, 'nao-existe'));
+      final handler = buildHandler(
+        db: db,
+        mediaDir: p.join(root.path, 'media'),
+        webDir: p.join(root.path, 'nao-existe'),
+      );
 
       final response = await _get(handler, '/');
 
@@ -97,7 +113,11 @@ void main() {
     });
 
     test('outros caminhos respondem 404', () async {
-      final handler = buildHandler(webDir: p.join(root.path, 'nao-existe'));
+      final handler = buildHandler(
+        db: db,
+        mediaDir: p.join(root.path, 'media'),
+        webDir: p.join(root.path, 'nao-existe'),
+      );
 
       expect((await _get(handler, '/tvs')).statusCode, 404);
     });

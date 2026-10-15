@@ -8,8 +8,27 @@ void main() {
       final config = ServerConfig.parse([])!;
 
       expect(config.port, defaultHttpPort);
+      expect(config.discoveryPort, 8788);
       expect(config.dataDir, defaultDataDir);
       expect(config.webDir, defaultWebDir);
+    });
+
+    test('lê a porta da descoberta de args ou env', () {
+      expect(
+        ServerConfig.parse(['--discovery-port', '9001'])!.discoveryPort,
+        9001,
+      );
+      expect(
+        ServerConfig.parse(
+          [],
+          environment: {'BEYOND_DISCOVERY_PORT': '9002'},
+        )!.discoveryPort,
+        9002,
+      );
+      expect(
+        () => ServerConfig.parse(['--discovery-port', '0']),
+        throwsA(isA<ConfigException>()),
+      );
     });
 
     test('lê as variáveis de ambiente', () {

@@ -93,4 +93,70 @@ void main() {
       expect(records.map((r) => r.level), [Level.INFO, Level.WARNING]);
     });
   });
+
+  group('originCheck', () {
+    final handler = const Pipeline()
+        .addMiddleware(errorHandler())
+        .addMiddleware(originCheck())
+        .addHandler((_) => Response.ok('ok'));
+
+    Future<Response> send(
+      String method, {
+      String? origin,
+      String host = '192.168.0.10:8787',
+    }) async => await handler(
+      Request(
+        method,
+        Uri.parse('http://$host/api/v1/x'),
+        headers: {'host': host, 'origin': ?origin},
+      ),
+    );
+
+    test('aceita POST da mesma origem', () async {
+      final response = await send('POST', origin: 'http://192.168.0.10:8787');
+
+      expect(response.statusCode, 200);
+    });
+
+    test('aceita POST sem Origin (app da TV)', () async {
+      expect((await send('POST')).statusCode, 200);
+    });
+
+    test('aceita a porta padrão escrita ou omitida', () async {
+      final response = await send(
+        'POST',
+        host: 'example.local',
+        origin: 'http://example.local:80',
+      );
+
+      expect(response.statusCode, 200);
+    });
+
+    for (final origin in [
+      'http://evil.example',
+      'http://192.168.0.10:9999',
+      'https://192.168.0.10:8787',
+      'null',
+    ]) {
+      test('recusa POST de $origin', () async {
+        final response = await send('POST', origin: origin);
+
+        expect(response.statusCode, 403);
+        final body = jsonDecode(await response.readAsString()) as Map;
+        expect(body['error']['code'], 'forbidden_origin');
+      });
+    }
+
+    test('não bloqueia GET de outra origem', () async {
+      final response = await send('GET', origin: 'http://evil.example');
+
+      expect(response.statusCode, 200);
+    });
+
+    test('recusa DELETE de outra origem', () async {
+      final response = await send('DELETE', origin: 'http://evil.example');
+
+      expect(response.statusCode, 403);
+    });
+  });
 }

@@ -27,7 +27,18 @@ void main() {
         .map((row) => row['name'])
         .toList();
 
-    expect(tables, ['admins', 'devices', 'groups', 'sessions', 'settings']);
+    expect(tables, [
+      'admins',
+      'audit_log',
+      'devices',
+      'groups',
+      'media',
+      'playlist_items',
+      'playlists',
+      'schedules',
+      'sessions',
+      'settings',
+    ]);
   });
 
   test('gera um server_id aleatório de 32 caracteres hex', () {
@@ -113,5 +124,186 @@ void main() {
       () => db.execute("UPDATE devices SET info = 'nao é json'"),
       throwsA(isA<SqliteException>()),
     );
+  });
+
+  group('playlists', () {
+    void insertMedia(String id) => db.execute(
+      "INSERT INTO media (id, kind, name, url) VALUES (?, 'url', 'M', 'https://a.local')",
+      [id],
+    );
+
+    void insertPlaylist(String id) =>
+        db.execute("INSERT INTO playlists (id, name) VALUES (?, 'P')", [id]);
+
+    void insertItem(String playlistId, int position, String mediaId) =>
+        db.execute(
+          'INSERT INTO playlist_items (playlist_id, position, media_id) '
+          'VALUES (?, ?, ?)',
+          [playlistId, position, mediaId],
+        );
+
+    test('está na versão 5', () {
+      expect(db.userVersion, 5);
+    });
+
+    test('apagar a mídia remove os itens das playlists', () {
+      insertMedia('m1');
+      insertPlaylist('p1');
+      insertItem('p1', 0, 'm1');
+
+      db.execute("DELETE FROM media WHERE id = 'm1'");
+
+      expect(db.select('SELECT * FROM playlist_items'), isEmpty);
+      expect(db.select('SELECT * FROM playlists'), hasLength(1));
+    });
+
+    test('apagar a playlist remove os itens e zera as TVs', () {
+      insertMedia('m1');
+      insertPlaylist('p1');
+      insertItem('p1', 0, 'm1');
+      insertDevice('tv1');
+      db.execute("UPDATE devices SET playlist_id = 'p1'");
+
+      db.execute("DELETE FROM playlists WHERE id = 'p1'");
+
+      expect(db.select('SELECT * FROM playlist_items'), isEmpty);
+      expect(
+        db.select('SELECT playlist_id FROM devices').single['playlist_id'],
+        isNull,
+      );
+    });
+
+    test('a posição é única na playlist, mas a mídia pode repetir', () {
+      insertMedia('m1');
+      insertPlaylist('p1');
+      insertItem('p1', 0, 'm1');
+      insertItem('p1', 1, 'm1');
+
+      expect(() => insertItem('p1', 1, 'm1'), throwsA(isA<SqliteException>()));
+    });
+
+    test('item exige playlist e mídia existentes', () {
+      insertPlaylist('p1');
+
+      expect(
+        () => insertItem('p1', 0, 'nada'),
+        throwsA(isA<SqliteException>()),
+      );
+      expect(
+        () => insertItem('nada', 0, 'nada'),
+        throwsA(isA<SqliteException>()),
+      );
+    });
+  });
+  group('grupos e agendamentos', () {
+    void insertPlaylist(String id) =>
+        db.execute("INSERT INTO playlists (id, name) VALUES (?, 'P')", [id]);
+    void insertGroup(int id) =>
+        db.execute("INSERT INTO groups (id, name) VALUES (?, 'G$id')", [id]);
+    void insertSchedule(
+      String id, {
+      String? deviceId,
+      int? groupId,
+      int days = 31,
+      int start = 660,
+      int end = 840,
+      int priority = 10,
+      String playlistId = 'p1',
+    }) => db.execute(
+      'INSERT INTO schedules (id, name, playlist_id, device_id, group_id, '
+      "days, start_min, end_min, priority) VALUES (?, 'S', ?, ?, ?, ?, ?, ?, ?)",
+      [id, playlistId, deviceId, groupId, days, start, end, priority],
+    );
+
+    test('está na versão 5', () {
+      expect(db.userVersion, 5);
+    });
+
+    test('exige exatamente um alvo', () {
+      insertPlaylist('p1');
+      insertGroup(1);
+      insertDevice('tv1');
+
+      insertSchedule('a', deviceId: 'tv1');
+      insertSchedule('b', groupId: 1);
+      expect(() => insertSchedule('c'), throwsA(isA<SqliteException>()));
+      expect(
+        () => insertSchedule('d', deviceId: 'tv1', groupId: 1),
+        throwsA(isA<SqliteException>()),
+      );
+    });
+
+    test('valida os limites de dias, horários e prioridade', () {
+      insertPlaylist('p1');
+      insertGroup(1);
+
+      for (final bad in [
+        () => insertSchedule('a', groupId: 1, days: 0),
+        () => insertSchedule('b', groupId: 1, days: 128),
+        () => insertSchedule('c', groupId: 1, start: 1440),
+        () => insertSchedule('d', groupId: 1, end: -1),
+        () => insertSchedule('e', groupId: 1, priority: 101),
+        () => insertSchedule('f', groupId: 1, priority: -1),
+      ]) {
+        expect(bad, throwsA(isA<SqliteException>()));
+      }
+      insertSchedule('ok', groupId: 1, days: 127, start: 1439, end: 0);
+    });
+
+    test('apagar a playlist apaga os agendamentos dela', () {
+      insertPlaylist('p1');
+      insertGroup(1);
+      insertSchedule('a', groupId: 1);
+
+      db.execute("DELETE FROM playlists WHERE id = 'p1'");
+
+      expect(db.select('SELECT * FROM schedules'), isEmpty);
+    });
+
+    test('apagar a TV apaga os agendamentos dela', () {
+      insertPlaylist('p1');
+      insertDevice('tv1');
+      insertDevice('tv2', tokenHash: 'h2');
+      insertSchedule('a', deviceId: 'tv1');
+      insertSchedule('b', deviceId: 'tv2');
+
+      db.execute("DELETE FROM devices WHERE id = 'tv1'");
+
+      expect(db.select('SELECT id FROM schedules').single['id'], 'b');
+    });
+
+    test('apagar o grupo apaga os agendamentos e solta as TVs', () {
+      insertPlaylist('p1');
+      insertGroup(1);
+      insertDevice('tv1', groupId: 1);
+      insertSchedule('a', groupId: 1);
+
+      db.execute('DELETE FROM groups WHERE id = 1');
+
+      expect(db.select('SELECT * FROM schedules'), isEmpty);
+      expect(
+        db.select('SELECT group_id FROM devices').single['group_id'],
+        isNull,
+      );
+    });
+
+    test('apagar a playlist ou a mídia zera o conteúdo do grupo', () {
+      insertPlaylist('p1');
+      db.execute(
+        "INSERT INTO media (id, kind, name, url) VALUES ('m1', 'url', 'M', 'https://a.local')",
+      );
+      insertGroup(1);
+      insertGroup(2);
+      db.execute("UPDATE groups SET playlist_id = 'p1' WHERE id = 1");
+      db.execute("UPDATE groups SET media_id = 'm1' WHERE id = 2");
+
+      db.execute("DELETE FROM playlists WHERE id = 'p1'");
+      db.execute("DELETE FROM media WHERE id = 'm1'");
+
+      for (final row in db.select('SELECT media_id, playlist_id FROM groups')) {
+        expect(row['media_id'], isNull);
+        expect(row['playlist_id'], isNull);
+      }
+    });
   });
 }

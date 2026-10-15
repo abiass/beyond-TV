@@ -13,6 +13,9 @@
     <!-- Necessária para receber respostas da descoberta por UDP broadcast. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Permite ao usuário conceder "sobrepor a outros apps", que libera abrir o
+         app sozinho após o boot no Android 10+. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
     <application
         android:label="Beyond TV"
@@ -41,6 +44,27 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Modo quiosque: desabilitado por padrão; o app só vira candidato a
+             launcher (HOME) quando o admin liga o modo no menu da TV. -->
+        <activity-alias
+            android:name=".KioskLauncher"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.HOME"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity-alias>
+        <!-- Reabre o app ao ligar a TV e após atualizar. Exportado porque o
+             sistema precisa entregar o broadcast; estas ações são protegidas. -->
+        <receiver android:name=".BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
         <!-- Usado pelo Flutter para gerar o GeneratedPluginRegistrant.java. -->
         <meta-data
             android:name="flutterEmbedding"

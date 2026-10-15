@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:beyond_server/server.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
@@ -40,7 +41,11 @@ Future<void> main(List<String> args) async {
   }
 
   final server = await shelf_io.serve(
-    buildHandler(webDir: config.webDir),
+    buildHandler(
+      db: db,
+      mediaDir: p.join(dataDir, 'media'),
+      webDir: config.webDir,
+    ),
     InternetAddress.anyIPv4,
     config.port,
   );
@@ -51,9 +56,31 @@ Future<void> main(List<String> args) async {
     }),
   );
 
+  DiscoveryResponder? discovery;
+  try {
+    discovery = await DiscoveryResponder.bind(
+      port: config.discoveryPort,
+      response: DiscoveryResponse(
+        name: Platform.localHostname,
+        port: server.port,
+        serverId: DeviceStore(db).serverId,
+      ),
+    );
+    log.info(LogEvent('descoberta ativa', {'udp': discovery.port}));
+  } on SocketException catch (e) {
+    // Sem descoberta, as TVs ainda conectam pelo IP digitado.
+    log.warning(
+      LogEvent('descoberta indisponível; use o IP manual nas TVs', {
+        'udp': config.discoveryPort,
+        'motivo': e.osError?.message ?? e.message,
+      }),
+    );
+  }
+
   // Encerra de forma limpa com Ctrl+C.
   await ProcessSignal.sigint.watch().first;
   log.info('encerrando');
+  await discovery?.close();
   await server.close();
   db.close();
   exit(0);

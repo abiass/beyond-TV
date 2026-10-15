@@ -1,6 +1,6 @@
 name: beyond_protocol
 description: Modelos e mensagens compartilhados entre servidor, dashboard e TV.
-version: 0.1.0
+version: 1.0.0
 publish_to: none
 resolution: workspace
 

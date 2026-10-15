@@ -1,0 +1,7 @@
+# Copie para key.properties (ignorado pelo git) e preencha.
+# storeFile é relativo a apps/tv/android/app/; prefira um caminho absoluto
+# fora do repositório.
+storeFile=/caminho/fora/do/repo/beyond-tv-release.jks
+storePassword=troque-isto
+keyAlias=beyond-tv
+keyPassword=troque-isto

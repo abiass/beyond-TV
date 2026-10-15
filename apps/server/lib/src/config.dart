@@ -1,8 +1,12 @@
 import 'package:args/args.dart';
+import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:logging/logging.dart';
 
 /// Porta HTTP padrão (dashboard, API, mídia e WebSocket).
 const defaultHttpPort = 8787;
+
+/// Porta UDP padrão da descoberta (a mesma que as TVs procuram).
+const defaultDiscoveryPort = discoveryPort;
 
 /// Pasta padrão dos dados de execução, relativa ao diretório atual.
 const defaultDataDir = 'data';
@@ -35,6 +39,7 @@ class ConfigException implements Exception {
 class ServerConfig {
   const ServerConfig({
     this.port = defaultHttpPort,
+    this.discoveryPort = defaultDiscoveryPort,
     this.dataDir = defaultDataDir,
     this.webDir = defaultWebDir,
     this.logLevel = Level.INFO,
@@ -62,7 +67,11 @@ class ServerConfig {
     }
 
     return ServerConfig(
-      port: _parsePort(option('port', 'BEYOND_PORT')),
+      port: _parsePort(option('port', 'BEYOND_PORT'), defaultHttpPort),
+      discoveryPort: _parsePort(
+        option('discovery-port', 'BEYOND_DISCOVERY_PORT'),
+        defaultDiscoveryPort,
+      ),
       dataDir: option('data-dir', 'BEYOND_DATA_DIR') ?? defaultDataDir,
       webDir: option('web-dir', 'BEYOND_WEB_DIR') ?? defaultWebDir,
       logLevel: _parseLogLevel(option('log-level', 'BEYOND_LOG_LEVEL')),
@@ -75,6 +84,9 @@ class ServerConfig {
   /// Porta TCP do HTTP e do WebSocket.
   final int port;
 
+  /// Porta UDP em que o servidor responde à descoberta das TVs.
+  final int discoveryPort;
+
   /// Pasta onde ficam o banco, as mídias e os logs.
   final String dataDir;
 
@@ -84,8 +96,8 @@ class ServerConfig {
   /// Nível mínimo das mensagens de log.
   final Level logLevel;
 
-  static int _parsePort(String? raw) {
-    if (raw == null) return defaultHttpPort;
+  static int _parsePort(String? raw, int defaultPort) {
+    if (raw == null) return defaultPort;
     final port = int.tryParse(raw);
     if (port == null || port < 1 || port > 65535) {
       throw ConfigException(
@@ -112,6 +124,13 @@ class ServerConfig {
       abbr: 'p',
       help: 'Porta HTTP. Variável de ambiente: BEYOND_PORT.',
       valueHelp: '$defaultHttpPort',
+    )
+    ..addOption(
+      'discovery-port',
+      help:
+          'Porta UDP da descoberta pelas TVs. '
+          'Variável de ambiente: BEYOND_DISCOVERY_PORT.',
+      valueHelp: '$defaultDiscoveryPort',
     )
     ..addOption(
       'data-dir',

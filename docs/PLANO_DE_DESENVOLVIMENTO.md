@@ -216,7 +216,7 @@ sequenceDiagram
     D-->>Admin: Exibe código + contagem regressiva (10 min)
 
     T->>S: UDP broadcast "BEYONDTV_DISCOVER v1"
-    S-->>T: { name, host, port, serverId }
+    S-->>T: { v, name, port, serverId } (o IP é a origem do pacote)
     T-->>Admin: Lista servidores encontrados (ou IP manual)
 
     Admin->>T: Digita K7M4QX no teclado on-screen
@@ -263,7 +263,9 @@ A especificação completa fica em `docs/protocolo.md`. O resumo vem abaixo.
 | GET | `/setup/status` | — | Indica se a configuração inicial já foi feita. |
 | POST | `/setup` | — (só na 1ª vez) | Cria o administrador. |
 | POST | `/auth/login` · `/auth/logout` | — / sessão | Login e logout com cookie de sessão. |
+| GET | `/auth/session` | admin | Usuário da sessão atual (`401` se não houver). |
 | POST | `/pairing-codes` | admin | Gera um código. |
+| GET | `/pairing-codes/:code` | admin | Situação do código (`pending`, `paired` ou `expired`). |
 | POST | `/pair` | código | A TV troca o código por um token. |
 | GET/PATCH/DELETE | `/devices[/:id]` | admin | Lista, renomeia ou remove uma TV. |
 | POST | `/devices/:id/commands` | admin | Envia `reload`, `identify`, `screenshot` ou `unpair`. |
@@ -505,96 +507,96 @@ verde.
 | 2.4 | `feat(server): adiciona logging estruturado e tratamento de erros` | ✅ |
 | 2.5 | `feat(server): serve build estático do dashboard` | ✅ |
 
-### Fase 3 — Autenticação do administrador ⬜
-| # | Commit |
-|---|--------|
-| 3.1 | `feat(server): adiciona setup inicial e criação de admin com bcrypt` |
-| 3.2 | `feat(server): adiciona login/logout com sessão em cookie seguro` |
-| 3.3 | `feat(server): adiciona rate limit e checagem de Origin` |
-| 3.4 | `feat(dashboard): adiciona telas de setup inicial e login` |
-| 3.5 | `test(server): cobre fluxos de setup, login e sessão expirada` |
+### Fase 3 — Autenticação do administrador ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 3.1 | `feat(server): adiciona setup inicial e criação de admin com bcrypt` | ✅ |
+| 3.2 | `feat(server): adiciona login/logout com sessão em cookie seguro` | ✅ |
+| 3.3 | `feat(server): adiciona rate limit e checagem de Origin` | ✅ |
+| 3.4 | `feat(dashboard): adiciona telas de setup inicial e login` | ✅ |
+| 3.5 | `test(server): cobre fluxos de setup, login e sessão expirada` | ✅ |
 
-### Fase 4 — Pareamento ⬜
-| # | Commit |
-|---|--------|
-| 4.1 | `feat(protocol): adiciona modelos de pareamento e DeviceInfo` |
-| 4.2 | `feat(server): gera códigos de pareamento com expiração e uso único` |
-| 4.3 | `feat(server): adiciona endpoint /pair com emissão de token` |
-| 4.4 | `feat(server): responde descoberta via UDP broadcast` |
-| 4.5 | `feat(tv): adiciona descoberta de servidor e entrada de IP manual` |
-| 4.6 | `feat(tv): adiciona tela de pareamento com teclado para D-pad` |
-| 4.7 | `feat(tv): armazena token no secure storage` |
-| 4.8 | `feat(dashboard): adiciona fluxo "Adicionar TV" com código e contador` |
-| 4.9 | `test(server): cobre código expirado, reutilizado e rate limit` |
-| 4.10 | `docs: documenta fluxo de pareamento em protocolo.md` |
+### Fase 4 — Pareamento ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 4.1 | `feat(protocol): adiciona modelos de pareamento e DeviceInfo` | ✅ |
+| 4.2 | `feat(server): gera códigos de pareamento com expiração e uso único` | ✅ |
+| 4.3 | `feat(server): adiciona endpoint /pair com emissão de token` | ✅ |
+| 4.4 | `feat(server): responde descoberta via UDP broadcast` | ✅ |
+| 4.5 | `feat(tv): adiciona descoberta de servidor e entrada de IP manual` | ✅ |
+| 4.6 | `feat(tv): adiciona tela de pareamento com teclado para D-pad` | ✅ |
+| 4.7 | `feat(tv): armazena token no secure storage` | ✅ |
+| 4.8 | `feat(dashboard): adiciona fluxo "Adicionar TV" com código e contador` | ✅ |
+| 4.9 | `test(server): cobre código expirado, reutilizado e rate limit` | ✅ |
+| 4.10 | `docs: documenta fluxo de pareamento em protocolo.md` | ✅ |
 
 **Marco:** a TV aparece no dashboard depois de digitar o código. 🎉
 
-### Fase 5 — Tempo real ⬜
-| # | Commit |
-|---|--------|
-| 5.1 | `feat(server): adiciona WS /ws/device autenticado por token` |
-| 5.2 | `feat(server): adiciona WS /ws/admin com eventos de status` |
-| 5.3 | `feat(tv): conecta WS com reconexão e backoff exponencial` |
-| 5.4 | `feat(tv): envia hello e heartbeat` |
-| 5.5 | `feat(dashboard): lista TVs com status online/offline ao vivo` |
-| 5.6 | `feat(dashboard): permite renomear e remover TV (revoga token)` |
+### Fase 5 — Tempo real ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 5.1 | `feat(server): adiciona WS /ws/device autenticado por token` | ✅ |
+| 5.2 | `feat(server): adiciona WS /ws/admin com eventos de status` | ✅ |
+| 5.3 | `feat(tv): conecta WS com reconexão e backoff exponencial` | ✅ |
+| 5.4 | `feat(tv): envia hello e heartbeat` | ✅ |
+| 5.5 | `feat(dashboard): lista TVs com status online/offline ao vivo` | ✅ |
+| 5.6 | `feat(dashboard): permite renomear e remover TV (revoga token)` | ✅ |
 
-### Fase 6 — Exibir sites (MVP) ⬜
-| # | Commit |
-|---|--------|
-| 6.1 | `feat(server): adiciona mídia do tipo url e atribuição a device` |
-| 6.2 | `feat(server): envia content.sync ao alterar conteúdo` |
-| 6.3 | `feat(tv): adiciona player WebView em tela cheia com wakelock` |
-| 6.4 | `feat(tv): persiste último manifesto para modo offline` |
-| 6.5 | `feat(server,tv): adiciona comandos reload, identify e unpair` |
-| 6.6 | `feat(dashboard): adiciona tela de detalhes da TV com URL e comandos` |
+### Fase 6 — Exibir sites (MVP) ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 6.1 | `feat(server): adiciona mídia do tipo url e atribuição a device` | ✅ |
+| 6.2 | `feat(server): envia content.sync ao alterar conteúdo` | ✅ |
+| 6.3 | `feat(tv): adiciona player WebView em tela cheia com wakelock` | ✅ |
+| 6.4 | `feat(tv): persiste último manifesto para modo offline` | ✅ |
+| 6.5 | `feat(server,tv): adiciona comandos reload, identify e unpair` | ✅ |
+| 6.6 | `feat(dashboard): adiciona tela de detalhes da TV com URL e comandos` | ✅ |
 
 **Marco → tag `v0.6.0` = MVP utilizável.**
 
-### Fase 7 — Biblioteca de mídia e playlists ⬜
-| # | Commit |
-|---|--------|
-| 7.1 | `feat(server): adiciona upload de imagem/vídeo com validação de MIME e tamanho` |
-| 7.2 | `feat(server): adiciona CRUD de playlists e itens` |
-| 7.3 | `feat(tv): adiciona cache de mídia por sha256` |
-| 7.4 | `feat(tv): adiciona players de imagem e vídeo com transição` |
-| 7.5 | `feat(tv): adiciona rotação de playlist por duração` |
-| 7.6 | `feat(dashboard): adiciona biblioteca de mídia com upload` |
-| 7.7 | `feat(dashboard): adiciona editor de playlist com reordenação` |
+### Fase 7 — Biblioteca de mídia e playlists ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 7.1 | `feat(server): adiciona upload de imagem/vídeo com validação de MIME e tamanho` | ✅ |
+| 7.2 | `feat(server): adiciona CRUD de playlists e itens` | ✅ |
+| 7.3 | `feat(tv): adiciona cache de mídia por sha256` | ✅ |
+| 7.4 | `feat(tv): adiciona players de imagem e vídeo com transição` | ✅ |
+| 7.5 | `feat(tv): adiciona rotação de playlist por duração` | ✅ |
+| 7.6 | `feat(dashboard): adiciona biblioteca de mídia com upload` | ✅ |
+| 7.7 | `feat(dashboard): adiciona editor de playlist com reordenação` | ✅ |
 
-### Fase 8 — Grupos e agendamento ⬜
-| # | Commit |
-|---|--------|
-| 8.1 | `feat(server): adiciona grupos e atribuição em lote` |
-| 8.2 | `feat(server): adiciona agendamentos com prioridade` |
-| 8.3 | `feat(tv): resolve agenda localmente (funciona offline)` |
-| 8.4 | `feat(dashboard): adiciona telas de grupos e agenda semanal` |
-| 8.5 | `test: cobre resolução de agenda (sobreposição, virada de dia)` |
+### Fase 8 — Grupos e agendamento ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 8.1 | `feat(server): adiciona grupos e atribuição em lote` | ✅ |
+| 8.2 | `feat(server): adiciona agendamentos com prioridade` | ✅ |
+| 8.3 | `feat(tv): resolve agenda localmente (funciona offline)` | ✅ |
+| 8.4 | `feat(dashboard): adiciona telas de grupos e agenda semanal` | ✅ |
+| 8.5 | `test: cobre resolução de agenda (sobreposição, virada de dia)` | ✅ |
 
-### Fase 9 — Operação remota ⬜
-| # | Commit |
-|---|--------|
-| 9.1 | `feat(tv): adiciona captura de tela sob demanda` |
-| 9.2 | `feat(dashboard): exibe preview da tela de cada TV` |
-| 9.3 | `feat(tv): adiciona menu oculto com informações e desparear` |
-| 9.4 | `feat(server): registra log de auditoria de ações do admin` |
+### Fase 9 — Operação remota ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 9.1 | `feat(tv): adiciona captura de tela sob demanda` | ✅ |
+| 9.2 | `feat(dashboard): exibe preview da tela de cada TV` | ✅ |
+| 9.3 | `feat(tv): adiciona menu oculto com informações e desparear` | ✅ |
+| 9.4 | `feat(server): registra log de auditoria de ações do admin` | ✅ |
 
-### Fase 10 — Robustez Android TV ⬜
-| # | Commit |
-|---|--------|
-| 10.1 | `feat(tv): inicia automaticamente após boot` |
-| 10.2 | `feat(tv): adiciona modo quiosque opcional (launcher)` |
-| 10.3 | `build(tv): configura assinatura de release via key.properties (fora do git)` |
-| 10.4 | `docs: adiciona guia de instalação na TV (adb e pen drive)` |
-| 10.5 | `perf(tv): otimiza memória do WebView e vídeos em TVs de baixo custo` |
+### Fase 10 — Robustez Android TV ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 10.1 | `feat(tv): inicia automaticamente após boot` | ✅ |
+| 10.2 | `feat(tv): adiciona modo quiosque opcional (launcher)` | ✅ |
+| 10.3 | `build(tv): configura assinatura de release via key.properties (fora do git)` | ✅ |
+| 10.4 | `docs: adiciona guia de instalação na TV (adb e pen drive)` | ✅ |
+| 10.5 | `perf(tv): otimiza memória do WebView e vídeos em TVs de baixo custo` | ✅ |
 
-### Fase 11 — Release 1.0 ⬜
-| # | Commit |
-|---|--------|
-| 11.1 | `build(server): adiciona script de build do executável Windows` |
-| 11.2 | `docs: revisa README com prints e guia rápido` |
-| 11.3 | `chore: prepara release 1.0.0` |
+### Fase 11 — Release 1.0 ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 11.1 | `build(server): adiciona script de build do executável Windows` | ✅ |
+| 11.2 | `docs: revisa README com prints e guia rápido` | ✅ |
+| 11.3 | `chore: prepara release 1.0.0` | ✅ |
 
 **Marco → tag `v1.0.0`, APK assinado e executável do servidor publicados no
 GitHub Releases.**

@@ -19,4 +19,6 @@ abstract final class MessageTypes {
   static const deviceOffline = 'device.offline';
   static const devicePaired = 'device.paired';
   static const deviceState = 'device.state';
+  static const deviceRemoved = 'device.removed';
+  static const deviceScreenshot = 'device.screenshot';
 }

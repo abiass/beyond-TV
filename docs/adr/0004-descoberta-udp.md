@@ -14,7 +14,9 @@ opção padrão, mas responder mDNS a partir do Windows em Dart puro é instáve
 
 - A TV envia um **UDP broadcast** com `BEYONDTV_DISCOVER v1` para a porta
   `8788/udp`.
-- O servidor responde em unicast com `{ name, host, port, serverId }`.
+- O servidor responde em unicast com `{ v, name, port, serverId }`. O IP
+  não vai na resposta: a TV usa o endereço de origem do pacote, que é sempre
+  o IP do servidor na rede da TV, mesmo num PC com várias placas de rede.
 - A tela da TV sempre oferece **"Digitar IP"** como alternativa.
 - Ao perder a conexão, a TV refaz a descoberta antes de desistir.
 

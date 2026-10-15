@@ -7,5 +7,5 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Player em tela cheia, sem barras do sistema.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  runApp(const TvApp());
+  runApp(TvApp());
 }
