@@ -14,6 +14,9 @@ abstract final class MessageTypes {
   static const cmdScreenshot = 'cmd.screenshot';
   static const cmdUnpair = 'cmd.unpair';
 
+  /// Controle remoto do site aberto. Payload: `RemoteInput`.
+  static const cmdInput = 'cmd.input';
+
   // Servidor → dashboard
   static const deviceOnline = 'device.online';
   static const deviceOffline = 'device.offline';
