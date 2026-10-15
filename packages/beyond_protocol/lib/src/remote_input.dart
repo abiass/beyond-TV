@@ -1,6 +1,9 @@
 import 'json_fields.dart';
 import 'protocol_exception.dart';
 
+/// Códigos de `error` da TV para o `cmd.input`.
+const remoteInputErrors = {'no_web_content', 'input_failed'};
+
 /// Tamanho máximo do texto de um `cmd.input` do tipo `text`.
 const maxRemoteTextLength = 500;
 

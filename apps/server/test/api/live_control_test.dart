@@ -88,6 +88,32 @@ void main() {
     expect(RemoteInput.fromJson(cmd.payload).text, 's3nh@');
   });
 
+  test('erro da TV ao executar a entrada chega ao painel', () async {
+    final channel = await connectDevice(server, tv.token);
+    final inbox = Inbox(channel);
+    sendHello(channel);
+    await inbox.nextOfType(MessageTypes.contentSync);
+    final adminInbox = Inbox(await connectAdmin(server, admin));
+
+    channel.sink.add(
+      Envelope.create(
+        MessageTypes.error,
+        payload: const ErrorPayload(
+          ref: 'x',
+          code: 'input_failed',
+          message: 'Clique no campo primeiro.',
+        ).toJson(),
+      ).encode(),
+    );
+
+    final event = await adminInbox.nextOfType(MessageTypes.deviceInputError);
+    expect(event.payload, {
+      'deviceId': tv.id,
+      'code': 'input_failed',
+      'message': 'Clique no campo primeiro.',
+    });
+  });
+
   test('entrada inválida dá 400', () async {
     await connectTv();
 

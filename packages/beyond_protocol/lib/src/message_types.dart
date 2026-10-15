@@ -25,6 +25,10 @@ abstract final class MessageTypes {
   static const deviceRemoved = 'device.removed';
   static const deviceScreenshot = 'device.screenshot';
 
+  /// A TV não executou uma entrada do controle remoto. Payload:
+  /// `{ "deviceId", "code", "message" }`.
+  static const deviceInputError = 'device.input_error';
+
   /// Uma TV pediu para ser aprovada. Payload: `PendingPairRequest`.
   static const pairRequestCreated = 'pair_request.created';
 
