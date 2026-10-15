@@ -83,6 +83,27 @@ class ApiClient {
         await _send('GET', '/api/v1/pairing-codes/$code'),
       );
 
+  /// TVs aguardando aprovação, da mais antiga para a mais nova.
+  Future<List<PendingPairRequest>> listPairRequests() async {
+    final json = await _send('GET', '/api/v1/pair-requests');
+    final requests = json['requests'];
+    if (requests is! List) return const [];
+    return [
+      for (final request in requests)
+        if (request is Map<String, Object?>)
+          PendingPairRequest.fromJson(request),
+    ];
+  }
+
+  /// Aprova o pedido [id]: a TV é cadastrada e devolvida.
+  Future<DeviceSummary> approvePairRequest(String id) async =>
+      DeviceSummary.fromJson(
+        await _send('POST', '/api/v1/pair-requests/$id/approve'),
+      );
+
+  Future<void> rejectPairRequest(String id) =>
+      _send('POST', '/api/v1/pair-requests/$id/reject');
+
   /// TVs pareadas, da mais nova para a mais antiga.
   Future<List<DeviceSummary>> listDevices() async {
     final json = await _send('GET', '/api/v1/devices');
