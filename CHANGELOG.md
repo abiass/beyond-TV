@@ -7,6 +7,20 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+
+- Pareamento por aprovação no painel: a TV pede para entrar e mostra um
+  código de 4 dígitos; o painel lista as TVs em *Aguardando aprovação*,
+  ao vivo, com o modelo, o IP e o código, e os botões Aprovar e Recusar.
+  Ninguém precisa digitar nada no controle remoto. O código digitado
+  continua disponível em *Digitar código* e é usado com servidores 1.0.
+
+### Corrigido
+
+- Teclado de pareamento da TV: descendo pelas fileiras, o foco do controle
+  saía do teclado e ficava preso sem nenhuma seta para voltar. Também
+  voltava a ficar sem foco depois de um código errado.
+
 ## [1.0.0] — 2026-10-15 — Fase 11: release 1.0
 
 Primeira versão estável. Reúne tudo das fases 1 a 10: pareamento por
