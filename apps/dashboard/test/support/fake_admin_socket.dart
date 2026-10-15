@@ -14,6 +14,9 @@ class FakeAdminSocket
   /// Entrega [event] ao dashboard, como se viesse do servidor.
   void emit(Envelope event) => _controller.foreign.sink.add(event.encode());
 
+  /// Entrega [data] crua, sem passar por [Envelope], para testar lixo.
+  void emitRaw(Object? data) => _controller.foreign.sink.add(data);
+
   /// Fecha a conexão como o servidor, com [code].
   void closeWith(int code) {
     _closeCode = code;

@@ -41,6 +41,7 @@ class AdminEvents {
 
   bool _connected = false;
   bool _stopped = false;
+  bool _connecting = false;
   int _attempt = 0;
   Timer? _retryTimer;
   StreamSubscription<Object?>? _subscription;
@@ -63,18 +64,26 @@ class AdminEvents {
       Duration(seconds: attempt >= 5 ? 30 : 1 << attempt);
 
   void start() {
-    if (_stopped || _subscription != null || _retryTimer != null) return;
+    if (_stopped ||
+        _connecting ||
+        _subscription != null ||
+        _retryTimer != null) {
+      return;
+    }
     unawaited(_connect());
   }
 
   Future<void> _connect() async {
     final WebSocketChannel channel;
+    _connecting = true;
     try {
       channel = _connector(_uri);
       await channel.ready;
     } on Object {
       _scheduleRetry();
       return;
+    } finally {
+      _connecting = false;
     }
     if (_stopped) {
       unawaited(channel.sink.close());
