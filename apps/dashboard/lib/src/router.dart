@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'audit/audit_page.dart';
 import 'auth/auth_controller.dart';
 import 'devices/device_detail_page.dart';
+import 'devices/live_control_page.dart';
 import 'groups/group_detail_page.dart';
 import 'groups/groups_page.dart';
 import 'media/media_library_page.dart';
@@ -25,6 +26,9 @@ abstract final class Routes {
 
   /// Detalhes da TV [id].
   static String device(String id) => '/tvs/$id';
+
+  /// Controle ao vivo da TV [id].
+  static String liveControl(String id) => '/tvs/$id/controle';
 
   static const media = '/midia';
   static const playlists = '/playlists';
@@ -88,6 +92,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/tvs/:id',
         builder: (context, state) =>
             DeviceDetailPage(id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/tvs/:id/controle',
+        builder: (context, state) =>
+            LiveControlPage(id: state.pathParameters['id']!),
       ),
       GoRoute(
         path: Routes.media,

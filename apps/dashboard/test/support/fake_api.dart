@@ -718,6 +718,37 @@ class FakeApi implements ApiClient {
   @override
   Future<DateTime?> getScreenshotInfo(String id) async => screenshotAt[id];
 
+  /// TVs em que o controle ao vivo foi aberto.
+  final liveStarted = <String>[];
+  int liveFrames = 0;
+
+  /// Entradas do controle remoto, em ordem.
+  final inputs = <RemoteInput>[];
+
+  /// Erro que os métodos do controle ao vivo devolvem, se preenchido.
+  ApiException? liveError;
+
+  @override
+  Future<void> startLiveControl(String id) async {
+    _maybeFail();
+    if (liveError case final error?) throw error;
+    liveStarted.add(id);
+  }
+
+  @override
+  Future<void> requestLiveFrame(String id) async {
+    _maybeFail();
+    if (liveError case final error?) throw error;
+    liveFrames++;
+  }
+
+  @override
+  Future<void> sendRemoteInput(String id, RemoteInput input) async {
+    _maybeFail();
+    if (liveError case final error?) throw error;
+    inputs.add(input);
+  }
+
   /// Linhas de auditoria, da mais nova para a mais antiga.
   final audit = <AuditEntry>[];
 

@@ -4,10 +4,12 @@ import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../api/api_client.dart';
 import '../auth/auth_controller.dart';
 import '../realtime/admin_events.dart';
+import '../router.dart';
 import 'format_relative.dart';
 
 /// Tempo que o painel espera o `device.screenshot` antes de desistir.
@@ -155,14 +157,34 @@ class _ScreenshotCardState extends ConsumerState<ScreenshotCard> {
               ),
               const SizedBox(height: 8),
             ],
-            Tooltip(
-              message:
-                  online ? 'Tira uma foto da tela da TV' : 'A TV está offline',
-              child: OutlinedButton.icon(
-                onPressed: online && !_waiting ? _capture : null,
-                icon: const Icon(Icons.screenshot_monitor),
-                label: const Text('Capturar tela'),
-              ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                Tooltip(
+                  message: online
+                      ? 'Tira uma foto da tela da TV'
+                      : 'A TV está offline',
+                  child: OutlinedButton.icon(
+                    onPressed: online && !_waiting ? _capture : null,
+                    icon: const Icon(Icons.screenshot_monitor),
+                    label: const Text('Capturar tela'),
+                  ),
+                ),
+                Tooltip(
+                  message: online
+                      ? 'Vê a tela ao vivo e usa o site da TV pelo PC '
+                          '(login, cliques, digitação)'
+                      : 'A TV está offline',
+                  child: FilledButton.icon(
+                    onPressed: online
+                        ? () => context.go(Routes.liveControl(_id))
+                        : null,
+                    icon: const Icon(Icons.mouse),
+                    label: const Text('Controlar'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
