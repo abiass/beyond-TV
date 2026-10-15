@@ -63,6 +63,15 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('PC-SALA'));
+    // Abre a aprovação no painel; sem a rota (404) ela cai sozinha no
+    // código digitado. Servidor fora do ar: escolhe "Digitar código".
+    // (Sem pumpAndSettle: o indicador de espera gira sem parar.)
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+    if (find.textContaining('digite aqui o código').evaluate().isEmpty) {
+      await tester.tap(find.text('Digitar código'));
+    }
     await tester.pumpAndSettle();
   }
 
