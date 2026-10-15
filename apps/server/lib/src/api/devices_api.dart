@@ -9,6 +9,7 @@ import '../http/json.dart';
 import '../logging.dart';
 import '../media/media_store.dart';
 import '../media/media_validation.dart';
+import '../playlists/playlist_store.dart';
 import '../realtime/content_sync.dart';
 import '../realtime/device_hub.dart';
 
@@ -19,24 +20,27 @@ final _log = Logger('devices');
 /// - `GET /api/v1/devices`: lista com o estado online.
 /// - `PATCH /api/v1/devices/<id>`: renomeia.
 /// - `DELETE /api/v1/devices/<id>`: remove e derruba o WebSocket da TV.
-/// - `PUT /api/v1/devices/<id>/content`: define o site exibido pela TV.
+/// - `PUT /api/v1/devices/<id>/content`: define o que a TV exibe (site, imagem, vídeo ou playlist).
 /// - `POST /api/v1/devices/<id>/commands`: `reload`, `identify` e `unpair`.
 class DevicesApi {
   DevicesApi({
     required SessionStore sessions,
     required DeviceStore devices,
     required MediaStore media,
+    required PlaylistStore playlists,
     required DeviceHub hub,
     required ContentSync sync,
   }) : _sessions = sessions,
        _devices = devices,
        _media = media,
+       _playlists = playlists,
        _hub = hub,
        _sync = sync;
 
   final SessionStore _sessions;
   final DeviceStore _devices;
   final MediaStore _media;
+  final PlaylistStore _playlists;
   final DeviceHub _hub;
   final ContentSync _sync;
 
@@ -87,14 +91,16 @@ class DevicesApi {
     final body = await readJsonObject(request);
     final hasMediaId = body.containsKey('mediaId');
     final hasUrl = body['url'] != null;
-    if (hasMediaId == hasUrl) {
+    final hasPlaylistId = body.containsKey('playlistId');
+    if ([hasMediaId, hasUrl, hasPlaylistId].where((has) => has).length != 1) {
       throw const ApiException.badRequest(
-        'Informe "mediaId" ou "url" (apenas um).',
+        'Informe "mediaId", "url" ou "playlistId" (apenas um).',
       );
     }
     if (_devices.find(id) == null) throw _notFound;
 
-    final String? mediaId;
+    String? mediaId;
+    String? playlistId;
     if (hasUrl) {
       final url = validateUrl(body['url']);
       final name = body['name'] == null
@@ -102,6 +108,15 @@ class DevicesApi {
           : validateMediaName(body['name']);
       mediaId =
           (_media.findByUrl(url) ?? _media.createUrl(url: url, name: name)).id;
+    } else if (hasPlaylistId) {
+      final value = body['playlistId'];
+      if (value != null && value is! String) {
+        throw const ApiException.badRequest('Campo "playlistId" inválido.');
+      }
+      if (value != null && _playlists.find(value as String) == null) {
+        throw const ApiException.notFound('Playlist não encontrada.');
+      }
+      playlistId = value as String?;
     } else {
       final value = body['mediaId'];
       if (value != null && value is! String) {
@@ -113,7 +128,7 @@ class DevicesApi {
       mediaId = value as String?;
     }
 
-    _devices.setMedia(id, mediaId);
+    _devices.setContent(id, mediaId: mediaId, playlistId: playlistId);
     _sync.syncDevice(id);
     final summary = _hub.summaryOf(_devices.find(id)!);
     _hub.publish(MessageTypes.deviceState, summary.toJson());

@@ -554,16 +554,16 @@ verde.
 
 **Marco → tag `v0.6.0` = MVP utilizável.**
 
-### Fase 7 — Biblioteca de mídia e playlists ⬜
-| # | Commit |
-|---|--------|
-| 7.1 | `feat(server): adiciona upload de imagem/vídeo com validação de MIME e tamanho` |
-| 7.2 | `feat(server): adiciona CRUD de playlists e itens` |
-| 7.3 | `feat(tv): adiciona cache de mídia por sha256` |
-| 7.4 | `feat(tv): adiciona players de imagem e vídeo com transição` |
-| 7.5 | `feat(tv): adiciona rotação de playlist por duração` |
-| 7.6 | `feat(dashboard): adiciona biblioteca de mídia com upload` |
-| 7.7 | `feat(dashboard): adiciona editor de playlist com reordenação` |
+### Fase 7 — Biblioteca de mídia e playlists ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 7.1 | `feat(server): adiciona upload de imagem/vídeo com validação de MIME e tamanho` | ✅ |
+| 7.2 | `feat(server): adiciona CRUD de playlists e itens` | ✅ |
+| 7.3 | `feat(tv): adiciona cache de mídia por sha256` | ✅ |
+| 7.4 | `feat(tv): adiciona players de imagem e vídeo com transição` | ✅ |
+| 7.5 | `feat(tv): adiciona rotação de playlist por duração` | ✅ |
+| 7.6 | `feat(dashboard): adiciona biblioteca de mídia com upload` | ✅ |
+| 7.7 | `feat(dashboard): adiciona editor de playlist com reordenação` | ✅ |
 
 ### Fase 8 — Grupos e agendamento ⬜
 | # | Commit |

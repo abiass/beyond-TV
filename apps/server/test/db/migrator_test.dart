@@ -82,17 +82,20 @@ void main() {
     expect(db.userVersion, 0);
   });
 
-  test('migração 2 preserva TVs existentes com media_id nulo', () {
+  test('migrações 2 e 3 preservam TVs existentes com media_id nulo', () {
     migrate(db, migrations.take(1).toList());
     db.execute(
       "INSERT INTO devices (id, name, token_hash) VALUES ('tv1', 'TV', 'h')",
     );
 
-    expect(migrate(db, migrations), [2]);
+    expect(migrate(db, migrations), [2, 3]);
 
-    final row = db.select('SELECT name, media_id FROM devices').single;
+    final row = db
+        .select('SELECT name, media_id, playlist_id FROM devices')
+        .single;
     expect(row['name'], 'TV');
     expect(row['media_id'], isNull);
+    expect(row['playlist_id'], isNull);
   });
 
   group('openDatabase', () {

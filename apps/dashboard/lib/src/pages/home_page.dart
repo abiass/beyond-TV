@@ -38,6 +38,17 @@ class HomePage extends ConsumerWidget {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Mídia',
+            icon: const Icon(Icons.perm_media_outlined),
+            onPressed: () => context.go(Routes.media),
+          ),
+          IconButton(
+            tooltip: 'Playlists',
+            icon: const Icon(Icons.playlist_play),
+            onPressed: () => context.go(Routes.playlists),
+          ),
+          const SizedBox(width: 8),
           _LiveIndicator(live: live),
           const SizedBox(width: 16),
           Center(child: Text(username)),
@@ -223,7 +234,9 @@ class _DeviceTile extends ConsumerWidget {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    device.content?.name ?? 'Sem conteúdo',
+                    device.playlist != null
+                        ? 'Playlist: ${device.playlist!.name}'
+                        : device.content?.name ?? 'Sem conteúdo',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

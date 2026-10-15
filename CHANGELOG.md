@@ -7,6 +7,29 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [0.7.0] — Fase 7: biblioteca de mídia e playlists
+
+### Adicionado
+
+- Envio de imagens (PNG, JPEG, WebP, GIF, até 25 MiB) e vídeos (MP4,
+  WebM, até 500 MiB) pela página Mídia do painel. O servidor confere o
+  tipo pelo conteúdo do arquivo e guarda cada um pelo sha256.
+- Playlists com sites, imagens e vídeos, montadas num editor de arrastar
+  para reordenar, com duração por item.
+- Cada TV exibe uma mídia avulsa ou uma playlist. Mudanças na playlist
+  chegam às TVs na hora.
+- A TV baixa os arquivos com o próprio token, confere o sha256, guarda em
+  cache e apaga o que não usa mais. Imagens trocam com transição suave e
+  vídeos tocam mudos até o fim.
+- Migração 3 do banco (tabelas `playlists` e `playlist_items`).
+- Teste de ponta a ponta do servidor com o binário real, cobrindo também
+  upload, playlist e download pela TV.
+
+### Corrigido
+
+- O canal ao vivo do painel não abre mais duas conexões quando é iniciado
+  duas vezes seguidas.
+
 ## [0.6.0] — Fase 6: exibir sites (MVP)
 
 ### Adicionado

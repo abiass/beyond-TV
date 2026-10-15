@@ -60,6 +60,7 @@ void main() {
     final discovery = FakeDiscovery([pcSala]);
     await tester.pumpWidget(
       TvApp(
+        mediaRoot: fakeMediaRoot,
         credentials: MemoryCredentialStore(credentials),
         discovery: discovery,
         api: fakeApi(),

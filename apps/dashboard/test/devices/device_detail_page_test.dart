@@ -1,9 +1,12 @@
+import 'package:beyond_dashboard/src/api/playlists.dart';
+import 'package:beyond_dashboard/src/api/media.dart';
 import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fake_admin_socket.dart';
 import '../support/fake_api.dart';
+import '../support/library.dart';
 
 DeviceSummary tv(String id, String name, {bool online = false}) =>
     DeviceSummary(
@@ -183,5 +186,72 @@ void main() {
       api.devices.firstWhere((d) => d.id == 'b').content,
       isNull,
     );
+  });
+
+  testWidgets('atribuir uma playlist chama setDevicePlaylist e mostra o nome',
+      (tester) async {
+    api.playlists.add(
+      Playlist(
+        id: 'p1',
+        name: 'Recepção manhã',
+        createdAt: DateTime.utc(2026, 10, 1),
+      ),
+    );
+    await openDetail(tester, 'Recepção');
+    expect(find.text('Nada atribuído.'), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownMenu<PlaylistSummary>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Recepção manhã').last);
+    await tester.pumpAndSettle();
+
+    expect(api.playlistAssignments, [('b', 'p1')]);
+    expect(find.text('Atribuído: Playlist: Recepção manhã'), findsOneWidget);
+    expect(find.text('Parar de exibir'), findsOneWidget);
+  });
+
+  testWidgets('mostra a playlist atual e "Parar de exibir" a limpa',
+      (tester) async {
+    api.playlists.add(
+      Playlist(
+        id: 'p1',
+        name: 'Recepção manhã',
+        createdAt: DateTime.utc(2026, 10, 1),
+      ),
+    );
+    final b = api.devices[1];
+    api.devices[1] = DeviceSummary(
+      id: b.id,
+      name: b.name,
+      online: b.online,
+      createdAt: b.createdAt,
+      info: b.info,
+      lastSeenAt: b.lastSeenAt,
+      currentItem: b.currentItem,
+      playlist: const PlaylistRef(id: 'p1', name: 'Recepção manhã'),
+    );
+    await openDetail(tester, 'Recepção');
+    expect(find.text('Atribuído: Playlist: Recepção manhã'), findsOneWidget);
+
+    await tester.tap(find.text('Parar de exibir'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Parar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nada atribuído.'), findsOneWidget);
+    expect(api.devices[1].playlist, isNull);
+  });
+
+  testWidgets('escolher mídia da biblioteca atribui a mídia', (tester) async {
+    api.media.addAll(sampleMedia());
+    await openDetail(tester, 'Recepção');
+
+    await tester.tap(find.byType(DropdownMenu<Media>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Promoção').last);
+    await tester.pumpAndSettle();
+
+    expect(api.devices[1].content?.mediaId, 'img');
+    expect(find.text('Atribuído: Promoção'), findsOneWidget);
   });
 }

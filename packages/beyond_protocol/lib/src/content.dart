@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'json_fields.dart';
+import 'media_files.dart';
+import 'playlists.dart';
 
-/// Tipos de mídia (`media.kind`). Na fase 6 só existe [url].
+/// Tipos de mídia (`media.kind`).
 abstract final class MediaKinds {
   static const url = 'url';
   static const image = 'image';
@@ -55,10 +57,14 @@ final class ContentItem {
   /// Endereço do site, para `kind == url`.
   final String? url;
 
-  /// Hash do arquivo, para imagem e vídeo (fase 7).
+  /// Hash do arquivo, para imagem e vídeo. A TV baixa o arquivo de
+  /// [mediaFilePath] e o guarda em cache com este nome.
   final String? sha256;
 
-  /// Por quanto tempo exibir antes do próximo item; `null` = sem rotação.
+  /// Por quanto tempo exibir antes do próximo item.
+  ///
+  /// `null`: vídeo toca até o fim; site ou imagem fica parado se for o único
+  /// item, senão usa [defaultItemDurationSeconds].
   final int? durationSeconds;
 
   Map<String, Object?> toJson() => {

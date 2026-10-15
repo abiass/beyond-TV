@@ -32,6 +32,8 @@ void main() {
       'devices',
       'groups',
       'media',
+      'playlist_items',
+      'playlists',
       'sessions',
       'settings',
     ]);
@@ -120,5 +122,75 @@ void main() {
       () => db.execute("UPDATE devices SET info = 'nao é json'"),
       throwsA(isA<SqliteException>()),
     );
+  });
+
+  group('playlists', () {
+    void insertMedia(String id) => db.execute(
+      "INSERT INTO media (id, kind, name, url) VALUES (?, 'url', 'M', 'https://a.local')",
+      [id],
+    );
+
+    void insertPlaylist(String id) =>
+        db.execute("INSERT INTO playlists (id, name) VALUES (?, 'P')", [id]);
+
+    void insertItem(String playlistId, int position, String mediaId) =>
+        db.execute(
+          'INSERT INTO playlist_items (playlist_id, position, media_id) '
+          'VALUES (?, ?, ?)',
+          [playlistId, position, mediaId],
+        );
+
+    test('está na versão 3', () {
+      expect(db.userVersion, 3);
+    });
+
+    test('apagar a mídia remove os itens das playlists', () {
+      insertMedia('m1');
+      insertPlaylist('p1');
+      insertItem('p1', 0, 'm1');
+
+      db.execute("DELETE FROM media WHERE id = 'm1'");
+
+      expect(db.select('SELECT * FROM playlist_items'), isEmpty);
+      expect(db.select('SELECT * FROM playlists'), hasLength(1));
+    });
+
+    test('apagar a playlist remove os itens e zera as TVs', () {
+      insertMedia('m1');
+      insertPlaylist('p1');
+      insertItem('p1', 0, 'm1');
+      insertDevice('tv1');
+      db.execute("UPDATE devices SET playlist_id = 'p1'");
+
+      db.execute("DELETE FROM playlists WHERE id = 'p1'");
+
+      expect(db.select('SELECT * FROM playlist_items'), isEmpty);
+      expect(
+        db.select('SELECT playlist_id FROM devices').single['playlist_id'],
+        isNull,
+      );
+    });
+
+    test('a posição é única na playlist, mas a mídia pode repetir', () {
+      insertMedia('m1');
+      insertPlaylist('p1');
+      insertItem('p1', 0, 'm1');
+      insertItem('p1', 1, 'm1');
+
+      expect(() => insertItem('p1', 1, 'm1'), throwsA(isA<SqliteException>()));
+    });
+
+    test('item exige playlist e mídia existentes', () {
+      insertPlaylist('p1');
+
+      expect(
+        () => insertItem('p1', 0, 'nada'),
+        throwsA(isA<SqliteException>()),
+      );
+      expect(
+        () => insertItem('nada', 0, 'nada'),
+        throwsA(isA<SqliteException>()),
+      );
+    });
   });
 }

@@ -41,7 +41,11 @@ Future<void> main(List<String> args) async {
   }
 
   final server = await shelf_io.serve(
-    buildHandler(db: db, webDir: config.webDir),
+    buildHandler(
+      db: db,
+      mediaDir: p.join(dataDir, 'media'),
+      webDir: config.webDir,
+    ),
     InternetAddress.anyIPv4,
     config.port,
   );

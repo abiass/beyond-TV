@@ -140,4 +140,32 @@ void main() {
     await _wait();
     expect(store.saved, isNull);
   });
+
+  test('descarta imagem e vídeo com sha256 inválido', () async {
+    await setUpController();
+    ContentItem media(String id, String kind, String sha) => ContentItem(
+          mediaId: id,
+          kind: kind,
+          name: id,
+          sha256: sha,
+        );
+    connector.last.serverSend(
+      _sync(
+        ContentManifest(
+          items: [
+            media('ok', MediaKinds.image, 'a' * 64),
+            media('ruim1', MediaKinds.image, '../x'),
+            media('ruim2', MediaKinds.video, 'A' * 64),
+            const ContentItem(
+              mediaId: 'sem',
+              kind: MediaKinds.image,
+              name: 's',
+            ),
+          ],
+        ),
+      ),
+    );
+    await _wait();
+    expect([for (final i in controller.manifest.items) i.mediaId], ['ok']);
+  });
 }

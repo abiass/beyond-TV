@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:beyond_tv/src/app.dart';
 import 'package:beyond_tv/src/content/manifest_store.dart';
@@ -6,8 +10,12 @@ import 'package:beyond_tv/src/realtime/backoff.dart';
 import 'package:beyond_tv/src/content/content_controller.dart';
 import 'package:beyond_tv/src/pages/player_page.dart';
 import 'package:beyond_tv/src/realtime/device_connection.dart';
+import 'package:beyond_tv/src/player/video_player_view.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import '../support/fake_socket.dart';
 import '../support/fakes.dart';
@@ -32,7 +40,58 @@ ContentManifest _site(String url) => ContentManifest(
 Envelope _sync(String url) =>
     Envelope.create(MessageTypes.contentSync, payload: _site(url).toJson());
 
+/// Vídeo falso: mostra `VIDEO:<nome>` e deixa o teste terminar o vídeo.
+class _FakeVideo implements VideoSurfaceController {
+  _FakeVideo(this.file);
+
+  final File file;
+  void Function()? completed;
+  bool disposed = false;
+
+  @override
+  set onCompleted(void Function() callback) => completed = callback;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Widget buildView(BuildContext context) =>
+      Text('VIDEO:${file.uri.pathSegments.last}');
+
+  @override
+  Future<void> dispose() async => disposed = true;
+}
+
+String _shaOf(String content) =>
+    sha256.convert(utf8.encode(content)).toString();
+
+ContentItem _image(String content, {int? seconds}) => ContentItem(
+      mediaId: 'img-$content',
+      kind: MediaKinds.image,
+      name: 'Imagem $content',
+      sha256: _shaOf(content),
+      durationSeconds: seconds,
+    );
+
+ContentItem _video(String content, {int? seconds}) => ContentItem(
+      mediaId: 'vid-$content',
+      kind: MediaKinds.video,
+      name: 'Vídeo $content',
+      sha256: _shaOf(content),
+      durationSeconds: seconds,
+    );
+
+Envelope _syncItems(List<ContentItem> items) => Envelope.create(
+      MessageTypes.contentSync,
+      payload: ContentManifest(items: items).toJson(),
+    );
+
 void main() {
+  late Directory mediaDir;
+  late List<_FakeVideo> videos;
   late FakeConnector connector;
   late MemoryCredentialStore credentials;
   late MemoryManifestStore manifests;
@@ -44,8 +103,19 @@ void main() {
     credentials = MemoryCredentialStore(_saved);
     manifests = MemoryManifestStore();
     log = FakePlayerLog();
+    videos = [];
     await tester.pumpWidget(
       TvApp(
+        mediaRoot: () async => mediaDir,
+        // Download que nunca termina: sem timers pendentes no teste.
+        mediaClient: () => MockClient(
+          (_) => Completer<http.Response>().future,
+        ),
+        videoSurface: (file) {
+          final video = _FakeVideo(file);
+          videos.add(video);
+          return video;
+        },
         credentials: credentials,
         discovery: FakeDiscovery(),
         api: fakeApi(),
@@ -67,9 +137,30 @@ void main() {
     await tester.pump();
   }
 
+  /// Põe um arquivo já baixado no cache.
+  void cacheFile(String content) =>
+      File('${mediaDir.path}/${_shaOf(content)}').writeAsStringSync(content);
+
+  Future<void> settle(WidgetTester tester) async {
+    for (var i = 0; i < 4; i++) {
+      await tester.pump();
+    }
+  }
+
+  bool isCachedImage(Widget w, String content) =>
+      w is Image &&
+      w.image is FileImage &&
+      (w.image as FileImage).file.path.endsWith(_shaOf(content));
+
   Future<void> close(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
   }
+
+  setUp(() {
+    mediaDir = Directory.systemTemp.createTempSync('player_page_media');
+  });
+
+  tearDown(() => mediaDir.deleteSync(recursive: true));
 
   testWidgets('manifesto vazio mostra "Aguardando conteúdo"', (tester) async {
     await open(tester);
@@ -178,5 +269,139 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
     expect(calls, [true, false]);
+  });
+
+  testWidgets('imagem pronta aparece com Image.file', (tester) async {
+    cacheFile('a');
+    await open(tester);
+    await deliver(tester, _syncItems([_image('a')]));
+    await settle(tester);
+
+    expect(
+      find.byWidgetPredicate((w) => isCachedImage(w, 'a')),
+      findsOneWidget,
+    );
+    expect(find.text('Baixando conteúdo…'), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('sem arquivo pronto mostra "Baixando conteúdo…"', (tester) async {
+    await open(tester);
+    await deliver(tester, _syncItems([_image('a')]));
+    await settle(tester);
+
+    expect(find.text('Baixando conteúdo…'), findsOneWidget);
+    expect(find.textContaining('Aguardando conteúdo'), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('troca de item com o tempo, com fade', (tester) async {
+    cacheFile('a');
+    cacheFile('b');
+    await open(tester);
+    await deliver(
+      tester,
+      _syncItems([_image('a', seconds: 5), _image('b', seconds: 5)]),
+    );
+    await settle(tester);
+    expect(
+      find.byWidgetPredicate((w) => isCachedImage(w, 'a')),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(seconds: 5));
+    // No meio da transição as duas imagens existem.
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.byWidgetPredicate((w) => isCachedImage(w, 'a')),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate((w) => isCachedImage(w, 'b')),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byWidgetPredicate((w) => isCachedImage(w, 'a')), findsNothing);
+    expect(
+      find.byWidgetPredicate((w) => isCachedImage(w, 'b')),
+      findsOneWidget,
+    );
+    await close(tester);
+  });
+
+  testWidgets('vídeo avança ao completar', (tester) async {
+    cacheFile('v');
+    cacheFile('a');
+    await open(tester);
+    await deliver(tester, _syncItems([_video('v'), _image('a', seconds: 5)]));
+    await settle(tester);
+
+    expect(find.text('VIDEO:${_shaOf('v')}'), findsOneWidget);
+    await tester.pump(const Duration(minutes: 5));
+    expect(find.text('VIDEO:${_shaOf('v')}'), findsOneWidget);
+
+    videos.single.completed!();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('VIDEO:${_shaOf('v')}'), findsNothing);
+    expect(
+      find.byWidgetPredicate((w) => isCachedImage(w, 'a')),
+      findsOneWidget,
+    );
+    expect(videos.single.disposed, isTrue);
+    await close(tester);
+  });
+
+  testWidgets('site e imagem alternam; site usa o WebView falso', (
+    tester,
+  ) async {
+    cacheFile('a');
+    await open(tester);
+    await deliver(
+      tester,
+      _syncItems([
+        const ContentItem(
+          mediaId: 's',
+          kind: MediaKinds.url,
+          name: 'Site',
+          url: 'https://example.local/s',
+        ),
+        _image('a'),
+      ]),
+    );
+    await settle(tester);
+    expect(find.text('WEB:https://example.local/s'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('WEB:https://example.local/s'), findsNothing);
+    expect(
+      find.byWidgetPredicate((w) => isCachedImage(w, 'a')),
+      findsOneWidget,
+    );
+    await close(tester);
+  });
+
+  testWidgets('identify aparece por cima da imagem', (tester) async {
+    cacheFile('a');
+    await open(tester);
+    await deliver(tester, _syncItems([_image('a')]));
+    await settle(tester);
+    await deliver(
+      tester,
+      Envelope.create(
+        MessageTypes.cmdIdentify,
+        payload: const IdentifyPayload(name: 'Recepção', durationSeconds: 1)
+            .toJson(),
+      ),
+    );
+    expect(find.text('Recepção'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((w) => isCachedImage(w, 'a')),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await close(tester);
   });
 }

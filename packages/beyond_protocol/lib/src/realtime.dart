@@ -1,4 +1,5 @@
 import 'content.dart';
+import 'playlists.dart';
 import 'device_info.dart';
 import 'json_fields.dart';
 
@@ -91,6 +92,7 @@ final class DeviceSummary {
     DateTime? lastSeenAt,
     this.currentItem,
     this.content,
+    this.playlist,
   })  : createdAt = createdAt.toUtc(),
         lastSeenAt = lastSeenAt?.toUtc();
 
@@ -98,6 +100,7 @@ final class DeviceSummary {
     final info = json.optionalField<Map<String, Object?>>('info');
     final lastSeen = json.optionalField<String>('lastSeenAt');
     final content = json.optionalField<Map<String, Object?>>('content');
+    final playlist = json.optionalField<Map<String, Object?>>('playlist');
     return DeviceSummary(
       id: json.field<String>('id'),
       name: json.field<String>('name'),
@@ -108,6 +111,7 @@ final class DeviceSummary {
       lastSeenAt: lastSeen == null ? null : json.dateField('lastSeenAt'),
       currentItem: json.optionalField<String>('currentItem'),
       content: content == null ? null : ContentItem.fromJson(content),
+      playlist: playlist == null ? null : PlaylistRef.fromJson(playlist),
     );
   }
 
@@ -128,8 +132,13 @@ final class DeviceSummary {
   /// O que a TV informou estar exibindo no último `hello`/`heartbeat`.
   final String? currentItem;
 
-  /// O que o painel mandou esta TV exibir, ou `null` se nada foi definido.
+  /// A mídia avulsa que o painel mandou esta TV exibir.
+  ///
+  /// [content] e [playlist] nunca vêm juntos; os dois `null` = sem conteúdo.
   final ContentItem? content;
+
+  /// A playlist que o painel mandou esta TV exibir.
+  final PlaylistRef? playlist;
 
   DeviceSummary copyWith({
     String? name,
@@ -147,6 +156,7 @@ final class DeviceSummary {
         lastSeenAt: lastSeenAt ?? this.lastSeenAt,
         currentItem: currentItem ?? this.currentItem,
         content: content,
+        playlist: playlist,
       );
 
   Map<String, Object?> toJson() => {
@@ -159,5 +169,6 @@ final class DeviceSummary {
         'lastSeenAt': lastSeenAt?.toIso8601String(),
         if (currentItem != null) 'currentItem': currentItem,
         'content': content?.toJson(),
+        'playlist': playlist?.toJson(),
       };
 }

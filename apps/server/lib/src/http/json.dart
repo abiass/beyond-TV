@@ -77,6 +77,13 @@ class ApiException implements Exception {
   const ApiException.conflict(String code, String message)
     : this(409, code, message);
 
+  const ApiException.payloadTooLarge([
+    String message = 'O corpo da requisição é grande demais.',
+  ]) : this(413, 'payload_too_large', message);
+
+  const ApiException.unsupportedMediaType(String message)
+    : this(415, 'unsupported_media_type', message);
+
   /// Status HTTP.
   final int status;
 
@@ -95,6 +102,5 @@ class ApiException implements Exception {
 }
 
 class _BodyTooLarge extends ApiException {
-  const _BodyTooLarge()
-    : super(413, 'payload_too_large', 'O corpo da requisição é grande demais.');
+  const _BodyTooLarge() : super.payloadTooLarge();
 }

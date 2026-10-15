@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:beyond_server/server.dart';
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -94,6 +95,33 @@ void main() {
         res.statusCode,
         json is Map<String, Object?> ? json : {'_': json},
       );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// Bytes de um PNG mínimo (o servidor só confere a assinatura).
+  final png = <int>[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, //
+    ...List.generate(32, (i) => i),
+  ];
+
+  /// Requisição com corpo binário e/ou cabeçalhos próprios; devolve os bytes.
+  Future<(int, List<int>, HttpHeaders)> bruto(
+    String metodo,
+    String caminho, {
+    Map<String, String> headers = const {},
+    List<int>? bytes,
+  }) async {
+    final client = HttpClient();
+    try {
+      final r = await client.openUrl(metodo, Uri.parse('$origem$caminho'));
+      r.headers.set('origin', origem);
+      headers.forEach(r.headers.set);
+      if (bytes != null) r.add(bytes);
+      final res = await r.close();
+      final corpo = await res.fold<List<int>>([], (a, b) => a..addAll(b));
+      return (res.statusCode, corpo, res.headers);
     } finally {
       client.close(force: true);
     }
@@ -292,6 +320,76 @@ void main() {
       final payload = (await identify)['payload']! as Map;
       expect(payload.values, contains('Recepção'));
     });
+
+    test(
+      'mídia e playlist: upload, sync e download com o token da TV',
+      () async {
+        final (up, upBody) =
+            await bruto(
+              'POST',
+              '/api/v1/media/files?name=Promo',
+              headers: {'cookie': cookie, 'content-type': 'image/png'},
+              bytes: png,
+            ).then(
+              (r) =>
+                  (r.$1, jsonDecode(utf8.decode(r.$2)) as Map<String, Object?>),
+            );
+        expect(up, 201);
+        final imagemId = upBody['id']! as String;
+        final hash = sha256.convert(png).toString();
+        expect(upBody['sha256'], hash);
+
+        final (_, sites) = await req('GET', '/api/v1/media');
+        final siteId =
+            (sites['media']! as List).cast<Map<String, Object?>>().firstWhere(
+                  (m) => m['kind'] == 'url',
+                )['id']!
+                as String;
+        final (criada, playlist) = await req(
+          'POST',
+          '/api/v1/playlists',
+          body: {'name': 'Recepção manhã'},
+        );
+        expect(criada, 201);
+        final playlistId = playlist['id']! as String;
+        final (itens, _) = await req(
+          'PUT',
+          '/api/v1/playlists/$playlistId/items',
+          body: {
+            'items': [
+              {'mediaId': siteId, 'durationSeconds': 20},
+              {'mediaId': imagemId},
+            ],
+          },
+        );
+        expect(itens, 200);
+
+        final sync = tv.next(MessageTypes.contentSync);
+        final (status, resumo) = await req(
+          'PUT',
+          '/api/v1/devices/$deviceId/content',
+          body: {'playlistId': playlistId},
+        );
+        expect(status, 200);
+        expect((resumo['playlist']! as Map)['id'], playlistId);
+
+        final payload = (await sync)['payload']! as Map;
+        final items = (payload['items']! as List).cast<Map<String, Object?>>();
+        expect(items, hasLength(2));
+        expect(items.first['url'], 'https://example.local/vendas');
+        expect(items.last['sha256'], hash);
+
+        final (down, bytes, headers) = await bruto(
+          'GET',
+          mediaFilePath(imagemId),
+          headers: {'authorization': 'Bearer $deviceToken'},
+        );
+        expect(down, 200);
+        expect(sha256.convert(bytes).toString(), hash);
+        expect(headers.value('etag'), '"$hash"');
+        expect(File(p.join(tmp.path, 'media', hash)).existsSync(), isTrue);
+      },
+    );
 
     test('token errado em /ws/device é recusado com 4401', () async {
       try {

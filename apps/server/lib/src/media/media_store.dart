@@ -11,7 +11,8 @@ class MediaStore {
   final Database _db;
   final Clock _clock;
 
-  static const _columns = 'id, kind, name, url, created_at';
+  static const _columns =
+      'id, kind, name, url, sha256, size_bytes, mime, created_at';
 
   /// Todas as mídias, da mais nova para a mais antiga.
   List<MediaRow> list() => [
@@ -48,6 +49,39 @@ class MediaStore {
     return find(id)!;
   }
 
+  /// A mídia de arquivo com o hash [sha256], ou `null`.
+  MediaRow? findBySha256(String sha256) {
+    final rows = _db.select(
+      'SELECT $_columns FROM media WHERE sha256 = ? '
+      'ORDER BY created_at, id LIMIT 1',
+      [sha256],
+    );
+    return rows.isEmpty ? null : _toRow(rows.first);
+  }
+
+  /// Indica se alguma mídia usa o arquivo [sha256].
+  bool isSha256InUse(String sha256) => _db.select(
+    'SELECT 1 FROM media WHERE sha256 = ? LIMIT 1',
+    [sha256],
+  ).isNotEmpty;
+
+  /// Cadastra uma imagem ou um vídeo já gravado em disco.
+  MediaRow createFile({
+    required String kind,
+    required String name,
+    required String sha256,
+    required int sizeBytes,
+    required String mime,
+  }) {
+    final id = generateId();
+    _db.execute(
+      'INSERT INTO media (id, kind, name, sha256, size_bytes, mime, created_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, kind, name, sha256, sizeBytes, mime, isoUtc(_clock())],
+    );
+    return find(id)!;
+  }
+
   /// Altera nome e/ou URL. Devolve a mídia atualizada, ou `null` se não existe.
   MediaRow? update(String id, {String? name, String? url}) {
     _db.execute(
@@ -69,6 +103,9 @@ class MediaStore {
     kind: row['kind'] as String,
     name: row['name'] as String,
     url: row['url'] as String?,
+    sha256: row['sha256'] as String?,
+    sizeBytes: row['size_bytes'] as int?,
+    mime: row['mime'] as String?,
     createdAt: DateTime.parse(row['created_at'] as String).toUtc(),
   );
 }
@@ -81,6 +118,9 @@ class MediaRow {
     required this.name,
     required this.createdAt,
     this.url,
+    this.sha256,
+    this.sizeBytes,
+    this.mime,
   });
 
   final String id;
@@ -89,6 +129,11 @@ class MediaRow {
   final String kind;
   final String name;
   final String? url;
+
+  /// Hash, tamanho e tipo do arquivo, para imagem e vídeo.
+  final String? sha256;
+  final int? sizeBytes;
+  final String? mime;
   final DateTime createdAt;
 
   /// Formato `Media` do protocolo.
@@ -96,10 +141,23 @@ class MediaRow {
     'id': id,
     'kind': kind,
     'name': name,
-    'url': url,
+    if (kind == MediaKinds.url)
+      'url': url
+    else ...{
+      'sha256': sha256,
+      'sizeBytes': sizeBytes,
+      'mime': mime,
+    },
     'createdAt': createdAt.toIso8601String(),
   };
 
-  ContentItem toContentItem() =>
-      ContentItem(mediaId: id, kind: kind, name: name, url: url);
+  /// Item do manifesto; [durationSeconds] vem do item da playlist.
+  ContentItem toContentItem({int? durationSeconds}) => ContentItem(
+    mediaId: id,
+    kind: kind,
+    name: name,
+    url: url,
+    sha256: sha256,
+    durationSeconds: durationSeconds,
+  );
 }

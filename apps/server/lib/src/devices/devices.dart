@@ -65,7 +65,8 @@ class DeviceStore {
   /// Todas as TVs, da mais nova para a mais antiga.
   List<DeviceRow> list() => [
     for (final row in _db.select(
-      'SELECT id, name, group_id, info, last_seen_at, created_at, media_id '
+      'SELECT id, name, group_id, info, last_seen_at, created_at, media_id, '
+      'playlist_id '
       'FROM devices ORDER BY created_at DESC, id',
     ))
       _toRow(row),
@@ -74,7 +75,8 @@ class DeviceStore {
   /// A TV [id], ou `null` se não existe.
   DeviceRow? find(String id) {
     final rows = _db.select(
-      'SELECT id, name, group_id, info, last_seen_at, created_at, media_id '
+      'SELECT id, name, group_id, info, last_seen_at, created_at, media_id, '
+      'playlist_id '
       'FROM devices WHERE id = ?',
       [id],
     );
@@ -89,13 +91,30 @@ class DeviceStore {
 
   /// Define a mídia exibida pela TV [deviceId] (`null` limpa).
   /// Devolve `false` se a TV não existe.
-  bool setMedia(String deviceId, String? mediaId) {
-    _db.execute('UPDATE devices SET media_id = ? WHERE id = ?', [
-      mediaId,
-      deviceId,
-    ]);
+  bool setMedia(String deviceId, String? mediaId) =>
+      setContent(deviceId, mediaId: mediaId);
+
+  /// Define o que a TV [deviceId] exibe: uma mídia avulsa ou uma playlist.
+  ///
+  /// Grava um e zera o outro; sem nenhum dos dois, limpa. Devolve `false` se
+  /// a TV não existe.
+  bool setContent(String deviceId, {String? mediaId, String? playlistId}) {
+    assert(mediaId == null || playlistId == null);
+    _db.execute(
+      'UPDATE devices SET media_id = ?, playlist_id = ? WHERE id = ?',
+      [mediaId, playlistId, deviceId],
+    );
     return _db.updatedRows > 0;
   }
+
+  /// Ids das TVs que exibem a playlist [playlistId].
+  List<String> devicesShowingPlaylist(String playlistId) => [
+    for (final row in _db.select(
+      'SELECT id FROM devices WHERE playlist_id = ? ORDER BY id',
+      [playlistId],
+    ))
+      row['id'] as String,
+  ];
 
   /// Ids das TVs que exibem a mídia [mediaId].
   List<String> devicesShowing(String mediaId) => [
@@ -123,6 +142,7 @@ class DeviceStore {
       lastSeenAt: lastSeen == null ? null : DateTime.parse(lastSeen).toUtc(),
       createdAt: DateTime.parse(row['created_at'] as String).toUtc(),
       mediaId: row['media_id'] as String?,
+      playlistId: row['playlist_id'] as String?,
     );
   }
 }
@@ -137,6 +157,7 @@ class DeviceRow {
     this.info,
     this.lastSeenAt,
     this.mediaId,
+    this.playlistId,
   });
 
   final String id;
@@ -150,4 +171,7 @@ class DeviceRow {
 
   /// Mídia que a TV deve exibir, se definida.
   final String? mediaId;
+
+  /// Playlist que a TV deve exibir, se definida (exclusiva com [mediaId]).
+  final String? playlistId;
 }

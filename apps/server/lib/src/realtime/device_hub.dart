@@ -7,6 +7,7 @@ import '../clock.dart';
 import '../devices/devices.dart';
 import '../logging.dart';
 import '../media/media_store.dart';
+import '../playlists/playlist_store.dart';
 
 final _log = Logger('realtime');
 
@@ -25,9 +26,11 @@ class DeviceHub {
   DeviceHub({
     required DeviceStore devices,
     required MediaStore media,
+    required PlaylistStore playlists,
     Clock clock = DateTime.now,
   }) : _devices = devices,
        _media = media,
+       _playlists = playlists,
        _clock = clock;
 
   /// Intervalo mínimo entre duas gravações de `last_seen_at` por TV.
@@ -35,6 +38,7 @@ class DeviceHub {
 
   final DeviceStore _devices;
   final MediaStore _media;
+  final PlaylistStore _playlists;
   final Clock _clock;
   final _connections = <String, DeviceConnection>{};
   final _currentItems = <String, String>{};
@@ -53,6 +57,8 @@ class DeviceHub {
   DeviceSummary summaryOf(DeviceRow row) {
     final mediaId = row.mediaId;
     final media = mediaId == null ? null : _media.find(mediaId);
+    final playlistId = row.playlistId;
+    final playlist = playlistId == null ? null : _playlists.find(playlistId);
     return DeviceSummary(
       id: row.id,
       name: row.name,
@@ -63,6 +69,9 @@ class DeviceHub {
       lastSeenAt: row.lastSeenAt,
       currentItem: currentItemOf(row.id),
       content: media?.toContentItem(),
+      playlist: playlist == null
+          ? null
+          : PlaylistRef(id: playlist.id, name: playlist.name),
     );
   }
 

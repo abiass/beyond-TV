@@ -155,4 +155,98 @@ void main() {
     final event = await adminInbox.nextOfType(MessageTypes.deviceState);
     expect((event.payload['content'] as Map)['url'], 'https://a.local');
   });
+
+  group('playlist', () {
+    Future<String> createPlaylist() async =>
+        (jsonBody(
+                  await server.post(
+                    '/api/v1/playlists',
+                    json: {'name': 'Lista'},
+                    headers: admin,
+                  ),
+                )!
+                as Map)['id']
+            as String;
+
+    test('playlistId inexistente dá 404', () async {
+      expect((await put({'playlistId': 'nada'})).statusCode, 404);
+    });
+
+    test('duas chaves dão 400', () async {
+      final id = await createPlaylist();
+
+      expect((await put({'playlistId': id, 'mediaId': null})).statusCode, 400);
+      expect(
+        (await put({'playlistId': id, 'url': 'https://a.local'})).statusCode,
+        400,
+      );
+      expect((await put({'playlistId': 5})).statusCode, 400);
+    });
+
+    test('atribuir playlist limpa a mídia avulsa e vice-versa', () async {
+      final id = await createPlaylist();
+      await put({'url': 'https://a.local'});
+
+      final withPlaylist = jsonBody(await put({'playlistId': id}))! as Map;
+      expect(withPlaylist['content'], isNull);
+      expect(withPlaylist['playlist'], {'id': id, 'name': 'Lista'});
+
+      final withMedia = jsonBody(await put({'url': 'https://b.local'}))! as Map;
+      expect((withMedia['content'] as Map)['url'], 'https://b.local');
+      expect(withMedia['playlist'], isNull);
+    });
+
+    test('playlistId nulo limpa e manda manifesto vazio', () async {
+      final id = await createPlaylist();
+      await connectTv();
+      await put({'playlistId': id});
+      await tvInbox.nextOfType(MessageTypes.contentSync);
+
+      final r = await put({'playlistId': null});
+
+      expect(r.statusCode, 200);
+      expect((jsonBody(r)! as Map)['playlist'], isNull);
+      final sync = await tvInbox.nextOfType(MessageTypes.contentSync);
+      expect(manifestOf(sync).isEmpty, isTrue);
+    });
+
+    test('a listagem de TVs traz a playlist', () async {
+      final id = await createPlaylist();
+      await put({'playlistId': id});
+
+      final list =
+          jsonBody(await server.get('/api/v1/devices', headers: admin))! as Map;
+
+      final device = (list['devices'] as List).single as Map;
+      expect(device['playlist'], {'id': id, 'name': 'Lista'});
+      expect(device['content'], isNull);
+    });
+
+    test('hello recebe os itens da playlist atual', () async {
+      final id = await createPlaylist();
+      final media = await server.post(
+        '/api/v1/media',
+        json: {'kind': 'url', 'url': 'https://a.local'},
+        headers: admin,
+      );
+      await server.send(
+        'PUT',
+        '/api/v1/playlists/$id/items',
+        json: {
+          'items': [
+            {'mediaId': (jsonBody(media)! as Map)['id']},
+          ],
+        },
+        headers: admin,
+      );
+      await put({'playlistId': id});
+
+      final channel = await connectDevice(server, tv.token);
+      final inbox = Inbox(channel);
+      sendHello(channel);
+
+      final sync = await inbox.nextOfType(MessageTypes.contentSync);
+      expect(manifestOf(sync).items.single.url, 'https://a.local');
+    });
+  });
 }

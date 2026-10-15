@@ -310,6 +310,97 @@ ignora manifestos iguais.
 - A tela não apaga enquanto o player está aberto (*wakelock*).
 - `currentItem` no `hello` e no `heartbeat` passa a ser a URL exibida.
 
+## Mídia e playlists (fase 7)
+
+Na fase 7 a biblioteca ganha **imagens e vídeos**, e uma TV passa a exibir
+uma **mídia avulsa** (como na fase 6) ou uma **playlist**. As duas opções são
+exclusivas: atribuir uma limpa a outra.
+
+### Upload
+
+| Método | Rota | Auth | Corpo | Resposta |
+|--------|------|------|-------|----------|
+| POST | `/media/files?name=<nome>` | admin | bytes do arquivo, com `Content-Type` do arquivo | `201 Media`. Se já existe mídia com o mesmo `sha256`, `200` com ela. |
+| GET | `/media/:id/file` | admin (cookie) ou TV (`Authorization: Bearer`) | — | `200` com o arquivo, `Content-Type` = `mime`, `ETag` = `"<sha256>"`, `Cache-Control: private, max-age=31536000, immutable`. `If-None-Match` igual → `304`. `404` para mídia `url`. |
+
+- O corpo é o arquivo cru, não `multipart`. `name` (1 a 64 caracteres
+  depois do trim) é opcional; sem ele vale `"Imagem"` ou `"Vídeo"`.
+- Tipos aceitos: `image/png`, `image/jpeg`, `image/webp`, `image/gif`,
+  `video/mp4` e `video/webm` (`mediaKindForMime`). O servidor confere o
+  `Content-Type` **e** os primeiros bytes do arquivo (assinatura do formato);
+  se não batem, `415 unsupported_media_type`.
+- Limites: 25 MiB para imagem e 500 MiB para vídeo (`maxBytesForKind`).
+  Acima disso, `413 payload_too_large`, mesmo sem `Content-Length`.
+- O arquivo é gravado em `data/media/<sha256>`, sem usar o nome enviado, a
+  partir de um arquivo temporário em `data/media/tmp/`.
+- `DELETE /media/:id` apaga também o arquivo, se nenhuma outra mídia usa o
+  mesmo `sha256`.
+
+`Media` de arquivo:
+
+```json
+{ "id": "…", "kind": "image", "name": "Promoção", "sha256": "e3b0…", "sizeBytes": 183422, "mime": "image/png", "createdAt": "…" }
+```
+
+`PATCH /media/:id` aceita só `name` para imagem e vídeo.
+
+### Playlists
+
+| Método | Rota | Auth | Corpo | Resposta |
+|--------|------|------|-------|----------|
+| GET | `/playlists` | admin | — | `200 { "playlists": [PlaylistSummary…] }`, por nome. |
+| POST | `/playlists` | admin | `{ "name" }` | `201 Playlist` (sem itens). |
+| GET | `/playlists/:id` | admin | — | `200 Playlist`. |
+| PATCH | `/playlists/:id` | admin | `{ "name" }` | `200 Playlist`. |
+| PUT | `/playlists/:id/items` | admin | `{ "items": [{ "mediaId", "durationSeconds"? }…] }` | `200 Playlist`. Substitui a lista inteira, na ordem enviada. |
+| DELETE | `/playlists/:id` | admin | — | `204`. As TVs que a exibiam ficam sem conteúdo. |
+
+```json
+// PlaylistSummary
+{ "id": "…", "name": "Recepção manhã", "itemCount": 3, "createdAt": "…" }
+// Playlist
+{ "id": "…", "name": "Recepção manhã", "createdAt": "…",
+  "items": [{ "media": Media, "durationSeconds": 15 }, { "media": Media, "durationSeconds": null }] }
+```
+
+- Nome: 1 a 64 caracteres depois do trim.
+- Até 200 itens (`maxPlaylistItems`). `durationSeconds` é `null` ou de 5 a
+  86400 (`isValidItemDuration`); fora disso, `400 invalid_duration`.
+- `mediaId` inexistente → `400 unknown_media`. A mesma mídia pode aparecer
+  mais de uma vez.
+- Apagar uma mídia a remove de todas as playlists.
+
+### Conteúdo da TV
+
+`PUT /devices/:id/content` aceita também `{ "playlistId": "…" }`
+(`404` se não existe). `{ "mediaId": null }` ou `{ "playlistId": null }`
+limpam tudo. `DeviceSummary` ganha `playlist` (`{ "id", "name" }` ou
+`null`); `content` e `playlist` nunca vêm juntos.
+
+A TV recebe `content.sync` sempre que muda o que ela exibe: troca de
+atribuição, `PUT` dos itens da playlist, edição ou remoção de uma mídia que
+está nela, remoção da playlist. Renomear a playlist não gera `content.sync`
+(o nome não vai no manifesto), mas gera `device.state` para o painel.
+
+No manifesto, cada item da playlist vira um `ContentItem` na mesma ordem.
+Imagem e vídeo levam `sha256` e não levam `url`; o arquivo é baixado de
+`mediaFilePath(mediaId)`.
+
+### Na TV
+
+- **Cache:** os arquivos ficam em `<app support>/media/<sha256>`. A TV baixa
+  com o token, grava em `.part`, confere o sha256 e só então renomeia. Um
+  arquivo com hash errado é apagado. Depois de cada manifesto, apaga os
+  arquivos que nenhum item usa.
+- **Rotação:** cada item fica `durationSeconds` na tela. Vídeo sem duração
+  toca até o fim; site ou imagem sem duração fica parado se for o único item,
+  senão usa 10 s (`defaultItemDurationSeconds`). Itens cujo arquivo ainda não
+  está no cache são pulados; se nenhum está pronto, a TV mostra "Baixando
+  conteúdo…".
+- **Players:** imagem com `Image.file` e transição *fade*; vídeo com
+  `video_player`, mudo e sem controles.
+- `currentItem` passa a ser o nome do item exibido (ou a URL, para sites).
+
 ## Saúde
 
 `GET /health` (sem auth) responde

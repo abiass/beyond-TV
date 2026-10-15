@@ -16,8 +16,9 @@ void main() {
 
   setUp(() async {
     server = await TestServer.start(
-      handler: (db) => buildHandler(
+      handler: (db, mediaDir) => buildHandler(
         db: db,
+        mediaDir: mediaDir,
         hasher: fastHasher,
         timeouts: const RealtimeTimeouts(hello: _short, silence: _short),
       ),

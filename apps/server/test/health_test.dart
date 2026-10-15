@@ -16,7 +16,7 @@ void main() {
   setUp(() async {
     db = openDatabase();
     server = await shelf_io.serve(
-      buildHandler(db: db),
+      buildHandler(db: db, mediaDir: 'unused'),
       InternetAddress.loopbackIPv4,
       0, // porta efêmera
     );

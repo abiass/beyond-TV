@@ -49,6 +49,7 @@ void main() {
     useTvScreen(tester);
     await tester.pumpWidget(
       TvApp(
+        mediaRoot: fakeMediaRoot,
         credentials: store,
         discovery: FakeDiscovery([pcSala]),
         deviceInfo: const FakeDeviceInfo(),

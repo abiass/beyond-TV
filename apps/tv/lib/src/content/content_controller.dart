@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:flutter/foundation.dart';
 
 import '../device/credentials.dart';
+import '../media/media_cache.dart';
 import '../player/web_player.dart';
+import '../realtime/backoff.dart';
 import '../realtime/device_connection.dart';
 import 'manifest_store.dart';
 
@@ -16,6 +19,9 @@ class ContentController extends ChangeNotifier {
     required this.store,
     required this.connection,
     this.credentials,
+    this.cache,
+    this.backoffFactory = Backoff.new,
+    this.wait = Future.delayed,
   });
 
   final ManifestStore store;
@@ -23,6 +29,13 @@ class ContentController extends ChangeNotifier {
 
   /// Apagadas no `cmd.unpair`.
   final CredentialStore? credentials;
+
+  /// Cache dos arquivos de imagem e vídeo; sem ele só sites são exibidos.
+  final MediaCache? cache;
+
+  /// Espera entre tentativas de download; os testes usam esperas curtas.
+  final Backoff Function() backoffFactory;
+  final Future<void> Function(Duration) wait;
 
   ContentManifest _manifest = ContentManifest.empty;
   StreamSubscription<Envelope>? _subscription;
@@ -32,6 +45,10 @@ class ContentController extends ChangeNotifier {
   bool _synced = false;
   bool _wasUnauthorized = false;
   bool _disposed = false;
+  final Set<String> _ready = {};
+  int _mediaRun = 0;
+  bool _shownReported = false;
+  ContentItem? _shown;
 
   ContentManifest get manifest => _manifest;
 
@@ -46,6 +63,30 @@ class ContentController extends ChangeNotifier {
     return null;
   }
 
+  /// A página informa o item que está na tela (`null`: nenhum).
+  void reportShown(ContentItem? item) {
+    _shownReported = true;
+    _shown = item;
+  }
+
+  /// Nome do item exibido (a URL, para sites), para o `currentItem` do
+  /// servidor. Antes de a página informar, vale a URL do primeiro site.
+  String? get currentItem {
+    if (!_shownReported) return currentUrl;
+    final item = _shown;
+    if (item == null) return null;
+    return item.kind == MediaKinds.url ? item.url : item.name;
+  }
+
+  /// O item já pode ser exibido: site, ou arquivo já em cache.
+  bool isReady(ContentItem item) =>
+      item.kind == MediaKinds.url ||
+      (item.sha256 != null && _ready.contains(item.sha256));
+
+  /// Arquivo em cache do item de imagem ou vídeo, se já foi baixado.
+  File? fileFor(ContentItem item) =>
+      item.sha256 == null ? null : cache?.cached(item.sha256!);
+
   /// Controle do player aberto; `null` no estado vazio.
   set player(WebPlayerController? value) => _player = value;
 
@@ -57,6 +98,7 @@ class ContentController extends ChangeNotifier {
     // Um sync que chegou durante a leitura é mais novo que o disco.
     if (saved != null && !_synced && !_disposed) {
       _manifest = saved;
+      _startMediaSync(saved);
       notifyListeners();
     }
   }
@@ -106,16 +148,86 @@ class ContentController extends ChangeNotifier {
       final safe = ContentManifest(
         items: [
           for (final item in incoming.items)
-            if (item.kind != MediaKinds.url ||
-                (item.url != null && isSafeContentUrl(item.url!)))
-              item,
+            if (_isSafe(item)) item,
         ],
       );
       _manifest = safe;
+      _startMediaSync(safe);
       notifyListeners();
       unawaited(_save(safe));
     }
     _ack(envelope);
+  }
+
+  bool _isSafe(ContentItem item) => switch (item.kind) {
+        MediaKinds.url => item.url != null && isSafeContentUrl(item.url!),
+        MediaKinds.image ||
+        MediaKinds.video =>
+          item.sha256 != null && isSha256Hex(item.sha256!),
+        _ => true,
+      };
+
+  /// Baixa os arquivos do [manifest] e, depois da primeira rodada, apaga os
+  /// que ele não usa. Falhas são repetidas com backoff enquanto o manifesto
+  /// for o mesmo.
+  void _startMediaSync(ContentManifest manifest) {
+    final cache = this.cache;
+    final run = ++_mediaRun;
+    if (cache == null) return;
+    final shas = {
+      for (final item in manifest.items)
+        if (item.sha256 != null) item.sha256!,
+    };
+    _ready.removeWhere((sha) => !shas.contains(sha));
+    unawaited(_syncMedia(cache, manifest, shas, run));
+  }
+
+  Future<void> _syncMedia(
+    MediaCache cache,
+    ContentManifest manifest,
+    Set<String> shas,
+    int run,
+  ) async {
+    bool stale() => _disposed || run != _mediaRun;
+    final credentials = connection.credentials;
+    final base = credentials.server.resolve('/');
+    final backoff = backoffFactory();
+    final pending = <String, ContentItem>{
+      for (final item in manifest.items)
+        if (item.sha256 != null) item.sha256!: item,
+    };
+    var first = true;
+    while (pending.isNotEmpty) {
+      for (final sha in pending.keys.toList()) {
+        if (stale()) return;
+        try {
+          await cache.ensure(
+            pending[sha]!,
+            base: base,
+            token: credentials.deviceToken,
+          );
+        } on Object catch (e) {
+          // Nunca inclui o token na mensagem.
+          debugPrint('Falha ao baixar a mídia ${pending[sha]!.mediaId}: $e');
+          continue;
+        }
+        if (stale()) return;
+        pending.remove(sha);
+        _ready.add(sha);
+        notifyListeners();
+      }
+      if (first) {
+        first = false;
+        try {
+          await cache.prune(shas);
+        } on Object catch (e) {
+          debugPrint('Falha ao limpar o cache de mídia: $e');
+        }
+      }
+      if (pending.isEmpty || stale()) return;
+      await wait(backoff.next());
+      if (stale()) return;
+    }
   }
 
   Future<void> _save(ContentManifest manifest) async {
@@ -166,6 +278,7 @@ class ContentController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    cache?.close();
     _identifyTimer?.cancel();
     unawaited(_subscription?.cancel());
     connection.removeListener(_onConnectionChanged);

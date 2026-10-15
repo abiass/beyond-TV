@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'dart:convert';
 
 import 'package:beyond_protocol/beyond_protocol.dart';
@@ -122,3 +124,7 @@ WebPlayerBuilder fakeWebPlayer(FakePlayerLog log) => (context, url, onCreated) {
       onCreated(_FakePlayerController(log));
       return Text('WEB:$url');
     };
+
+/// Pasta de mídia que nunca é criada: os testes de app não baixam nada.
+Future<Directory> fakeMediaRoot() async =>
+    Directory('${Directory.systemTemp.path}/beyond_tv_test_no_media');

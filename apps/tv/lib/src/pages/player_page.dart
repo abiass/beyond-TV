@@ -4,13 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'package:beyond_protocol/beyond_protocol.dart';
+
 import '../content/content_controller.dart';
+import '../player/image_player.dart';
+import '../player/playlist_rotation.dart';
+import '../player/video_player_view.dart';
 import '../player/web_player.dart';
 import '../realtime/device_connection.dart';
 import 'paired_page.dart';
 
-/// Tela da TV pareada: o site em tela cheia, ou o estado vazio enquanto não
-/// há conteúdo. Também leva de volta ao pareamento se a TV for removida.
+/// Tela da TV pareada: o item da rotação em tela cheia (site, imagem ou
+/// vídeo), ou o estado vazio enquanto não há conteúdo. Também leva de volta ao pareamento se a TV for removida.
 class PlayerPage extends StatefulWidget {
   const PlayerPage({
     super.key,
@@ -18,12 +23,14 @@ class PlayerPage extends StatefulWidget {
     required this.connection,
     required this.onUnauthorized,
     this.webPlayer = defaultWebPlayer,
+    this.videoSurface = defaultVideoSurface,
     this.setWakelock = _defaultWakelock,
   });
 
   final ContentController content;
   final DeviceConnection connection;
   final WebPlayerBuilder webPlayer;
+  final VideoSurfaceFactory videoSurface;
 
   /// Liga ou desliga o *wakelock*; os testes trocam por um registro.
   final Future<void> Function(bool on) setWakelock;
@@ -39,6 +46,9 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> {
+  late final PlaylistRotation _rotation;
+  late final _RestartController _restart;
+  String? _revision;
   Timer? _tick;
   bool _left = false;
   bool _immersive = false;
@@ -50,6 +60,9 @@ class _PlayerPageState extends State<PlayerPage> {
   void initState() {
     super.initState();
     unawaited(widget.setWakelock(true));
+    _rotation = PlaylistRotation(isReady: _content.isReady)
+      ..addListener(_onRotation);
+    _restart = _RestartController(_rotation);
     _connection.addListener(_onChanged);
     _content.addListener(_onChanged);
     // Atualiza o "tentando de novo em N s" a cada segundo.
@@ -62,7 +75,12 @@ class _PlayerPageState extends State<PlayerPage> {
     _connection.start();
   }
 
-  bool get _playing => _content.currentUrl != null;
+  bool get _playing => !_content.manifest.isEmpty;
+
+  void _onRotation() {
+    _content.reportShown(_rotation.current?.item);
+    if (mounted) setState(() {});
+  }
 
   void _onChanged() {
     if (!mounted) return;
@@ -71,6 +89,13 @@ class _PlayerPageState extends State<PlayerPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) widget.onUnauthorized(context);
       });
+    }
+    final manifest = _content.manifest;
+    if (manifest.revision != _revision) {
+      _revision = manifest.revision;
+      _rotation.setItems(manifest.items);
+    } else {
+      _rotation.readinessChanged();
     }
     setState(() {});
   }
@@ -90,6 +115,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _tick?.cancel();
     _connection.removeListener(_onChanged);
     _content.removeListener(_onChanged);
+    _rotation.dispose();
     unawaited(widget.setWakelock(false));
     if (_immersive) {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
@@ -101,11 +127,11 @@ class _PlayerPageState extends State<PlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final url = _content.currentUrl;
+    final current = _rotation.current;
     _syncSystemUi();
 
     final Widget body;
-    if (url == null) {
+    if (!_playing) {
       _content.player = null;
       body = PairedPage(connection: _connection);
     } else {
@@ -114,10 +140,14 @@ class _PlayerPageState extends State<PlayerPage> {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            widget.webPlayer(
-              context,
-              url,
-              (controller) => _content.player = controller,
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 600),
+              child: current == null
+                  ? const _DownloadingView(key: ValueKey('downloading'))
+                  : KeyedSubtree(
+                      key: ValueKey(current.key),
+                      child: _itemView(context, current),
+                    ),
             ),
             if (_connection.status == ConnectionStatus.offline)
               const Positioned(
@@ -154,6 +184,60 @@ class _PlayerPageState extends State<PlayerPage> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _itemView(BuildContext context, RotationEntry entry) {
+    final item = entry.item;
+    if (item.kind == MediaKinds.url) {
+      return widget.webPlayer(
+        context,
+        item.url!,
+        (controller) => _content.player = controller,
+      );
+    }
+    _content.player = _restart;
+    final file = _content.fileFor(item);
+    if (file == null) return const SizedBox.expand();
+    if (item.kind == MediaKinds.video) {
+      return VideoItemView(
+        file: file,
+        factory: widget.videoSurface,
+        onCompleted: _rotation.onVideoCompleted,
+      );
+    }
+    return ImagePlayer(file: file);
+  }
+}
+
+/// `cmd.reload` para imagem e vídeo: recomeça o item.
+class _RestartController implements WebPlayerController {
+  _RestartController(this.rotation);
+
+  final PlaylistRotation rotation;
+
+  @override
+  Future<void> reload() async => rotation.restartCurrent();
+}
+
+/// Nada pronto ainda: os arquivos estão sendo baixados.
+class _DownloadingView extends StatelessWidget {
+  const _DownloadingView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: Text(
+          'Baixando conteúdo…',
+          style: TextStyle(
+            fontSize: 48,
+            color: Colors.white,
+            decoration: TextDecoration.none,
+          ),
+        ),
+      ),
     );
   }
 }

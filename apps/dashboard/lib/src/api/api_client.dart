@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:http/http.dart' as http;
 
 import 'media.dart';
+import 'playlists.dart';
 
 /// Erro devolvido pela API (ou falha de rede), com mensagem pronta para
 /// exibir.
@@ -100,7 +102,8 @@ class ApiClient {
   Future<void> removeDevice(String id) =>
       _send('DELETE', '/api/v1/devices/$id');
 
-  /// Sites salvos na biblioteca, do mais novo para o mais antigo.
+  /// Mídias da biblioteca (sites, imagens e vídeos), da mais nova para a
+  /// mais antiga.
   Future<List<Media>> listMedia() async {
     final json = await _send('GET', '/api/v1/media');
     final media = json['media'];
@@ -110,6 +113,109 @@ class ApiClient {
         if (item is Map<String, Object?>) Media.fromJson(item),
     ];
   }
+
+  /// Endereço do arquivo de [mediaId], para pré-visualizar no painel (o
+  /// cookie de sessão segue sozinho, pois é a mesma origem).
+  Uri fileUrl(String mediaId) => _baseUri.resolve(mediaFilePath(mediaId));
+
+  /// Salva um site na biblioteca. Sem [name], o servidor usa o host.
+  Future<Media> createSite(String url, {String? name}) async => Media.fromJson(
+        await _send(
+          'POST',
+          '/api/v1/media',
+          body: {
+            'kind': MediaKinds.url,
+            'url': url,
+            if (name != null) 'name': name,
+          },
+        ),
+      );
+
+  /// Envia um arquivo (corpo cru, `Content-Type` = [mime]). Se o servidor já
+  /// tem o mesmo arquivo, devolve a mídia existente.
+  Future<Media> uploadMedia(
+    Uint8List bytes, {
+    required String mime,
+    String? name,
+  }) async =>
+      Media.fromJson(
+        await _send(
+          'POST',
+          Uri(
+            path: '/api/v1/media/files',
+            queryParameters: name == null ? null : {'name': name},
+          ).toString(),
+          bytes: bytes,
+          contentType: mime,
+        ),
+      );
+
+  Future<Media> renameMedia(String id, String name) async => Media.fromJson(
+        await _send('PATCH', '/api/v1/media/$id', body: {'name': name}),
+      );
+
+  /// Apaga a mídia (e a tira das playlists e das TVs).
+  Future<void> deleteMedia(String id) => _send('DELETE', '/api/v1/media/$id');
+
+  /// Playlists, por nome.
+  Future<List<PlaylistSummary>> listPlaylists() async {
+    final json = await _send('GET', '/api/v1/playlists');
+    final playlists = json['playlists'];
+    if (playlists is! List) return const [];
+    return [
+      for (final item in playlists)
+        if (item is Map<String, Object?>) PlaylistSummary.fromJson(item),
+    ];
+  }
+
+  Future<Playlist> createPlaylist(String name) async => Playlist.fromJson(
+        await _send('POST', '/api/v1/playlists', body: {'name': name}),
+      );
+
+  Future<Playlist> getPlaylist(String id) async =>
+      Playlist.fromJson(await _send('GET', '/api/v1/playlists/$id'));
+
+  Future<Playlist> renamePlaylist(String id, String name) async =>
+      Playlist.fromJson(
+        await _send('PATCH', '/api/v1/playlists/$id', body: {'name': name}),
+      );
+
+  Future<void> deletePlaylist(String id) =>
+      _send('DELETE', '/api/v1/playlists/$id');
+
+  /// Substitui a lista inteira, na ordem dada. `null` = duração padrão.
+  Future<Playlist> setPlaylistItems(
+    String id,
+    List<(String mediaId, int? durationSeconds)> items,
+  ) async =>
+      Playlist.fromJson(
+        await _send(
+          'PUT',
+          '/api/v1/playlists/$id/items',
+          body: {
+            'items': [
+              for (final (mediaId, seconds) in items)
+                {
+                  'mediaId': mediaId,
+                  if (seconds != null) 'durationSeconds': seconds,
+                },
+            ],
+          },
+        ),
+      );
+
+  /// Manda a TV [id] exibir a playlist [playlistId]; `null` limpa.
+  Future<DeviceSummary> setDevicePlaylist(
+    String id,
+    String? playlistId,
+  ) async =>
+      DeviceSummary.fromJson(
+        await _send(
+          'PUT',
+          '/api/v1/devices/$id/content',
+          body: {'playlistId': playlistId},
+        ),
+      );
 
   /// Manda a TV [id] exibir o site [url], com [name] opcional.
   Future<DeviceSummary> setDeviceContentUrl(
@@ -153,9 +259,14 @@ class ApiClient {
     String method,
     String path, {
     Map<String, Object?>? body,
+    Uint8List? bytes,
+    String? contentType,
   }) async {
     final request = http.Request(method, _baseUri.resolve(path));
-    if (body != null) {
+    if (bytes != null) {
+      request.headers['content-type'] = contentType!;
+      request.bodyBytes = bytes;
+    } else if (body != null) {
       request.headers['content-type'] = 'application/json';
       request.body = jsonEncode(body);
     }

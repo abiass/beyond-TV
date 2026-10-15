@@ -9,6 +9,7 @@ import 'api/auth_api.dart';
 import 'api/devices_api.dart';
 import 'api/media_api.dart';
 import 'api/pairing_api.dart';
+import 'api/playlists_api.dart';
 import 'api/setup_api.dart';
 import 'auth/admins.dart';
 import 'auth/passwords.dart';
@@ -19,7 +20,9 @@ import 'http/json.dart';
 import 'http/middleware.dart';
 import 'http/rate_limit.dart';
 import 'http/static_site.dart';
+import 'media/media_files.dart';
 import 'media/media_store.dart';
+import 'playlists/playlist_store.dart';
 import 'pairing/pairing_codes.dart';
 import 'realtime/admin_socket.dart';
 import 'realtime/content_sync.dart';
@@ -32,9 +35,11 @@ const serverVersion = '0.1.0';
 /// Monta o handler HTTP completo do servidor.
 ///
 /// As rotas da API ficam em `/health`, `/api/` e `/ws/`. O resto é o
-/// dashboard, servido de [webDir] quando a pasta existe.
+/// dashboard, servido de [webDir] quando a pasta existe. Os arquivos de
+/// imagem e vídeo ficam em [mediaDir].
 Handler buildHandler({
   required Database db,
+  required String mediaDir,
   String? webDir,
   PasswordHasher hasher = const PasswordHasher(),
   Clock clock = DateTime.now,
@@ -74,8 +79,20 @@ Handler buildHandler({
   ).addRoutes(router);
   final devices = DeviceStore(db, clock: clock);
   final media = MediaStore(db, clock: clock);
-  final hub = DeviceHub(devices: devices, media: media, clock: clock);
-  final sync = ContentSync(devices: devices, media: media, hub: hub);
+  final playlists = PlaylistStore(db, media, clock: clock);
+  final files = MediaFiles(mediaDir);
+  final hub = DeviceHub(
+    devices: devices,
+    media: media,
+    playlists: playlists,
+    clock: clock,
+  );
+  final sync = ContentSync(
+    devices: devices,
+    media: media,
+    playlists: playlists,
+    hub: hub,
+  );
   PairingApi(
     sessions: sessions,
     codes: PairingCodeStore(clock: clock),
@@ -91,11 +108,22 @@ Handler buildHandler({
     sessions: sessions,
     devices: devices,
     media: media,
+    playlists: playlists,
     hub: hub,
     sync: sync,
   ).addRoutes(router);
   MediaApi(
     sessions: sessions,
+    media: media,
+    files: files,
+    playlists: playlists,
+    devices: devices,
+    hub: hub,
+    sync: sync,
+  ).addRoutes(router);
+  PlaylistsApi(
+    sessions: sessions,
+    playlists: playlists,
     media: media,
     devices: devices,
     hub: hub,

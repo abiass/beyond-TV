@@ -47,7 +47,7 @@ class DeviceSocket {
 
   /// Handler da rota; autentica pelo cabeçalho antes do upgrade.
   FutureOr<Response> handle(Request request) {
-    final token = _bearerOf(request);
+    final token = bearerTokenOf(request);
     final device = token == null
         ? null
         : _devices.findByTokenHash(hashToken(token));
@@ -56,14 +56,6 @@ class DeviceSocket {
           _onConnection(channel, device),
       pingInterval: heartbeatInterval,
     )(request);
-  }
-
-  static String? _bearerOf(Request request) {
-    final header = request.headers['authorization'];
-    if (header == null || header.length < 8) return null;
-    if (header.substring(0, 7).toLowerCase() != 'bearer ') return null;
-    final token = header.substring(7).trim();
-    return token.isEmpty ? null : token;
   }
 
   void _onConnection(

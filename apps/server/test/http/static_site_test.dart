@@ -34,7 +34,13 @@ void main() {
   group('com o dashboard compilado', () {
     late Handler handler;
 
-    setUp(() => handler = buildHandler(db: db, webDir: webDir));
+    setUp(
+      () => handler = buildHandler(
+        db: db,
+        mediaDir: p.join(root.path, 'media'),
+        webDir: webDir,
+      ),
+    );
 
     test('serve o index.html na raiz', () async {
       final response = await _get(handler, '/');
@@ -96,6 +102,7 @@ void main() {
     test('explica como compilar ao abrir a raiz', () async {
       final handler = buildHandler(
         db: db,
+        mediaDir: p.join(root.path, 'media'),
         webDir: p.join(root.path, 'nao-existe'),
       );
 
@@ -108,6 +115,7 @@ void main() {
     test('outros caminhos respondem 404', () async {
       final handler = buildHandler(
         db: db,
+        mediaDir: p.join(root.path, 'media'),
         webDir: p.join(root.path, 'nao-existe'),
       );
 

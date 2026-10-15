@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import 'auth/auth_controller.dart';
 import 'devices/device_detail_page.dart';
+import 'media/media_library_page.dart';
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
 import 'pages/setup_page.dart';
 import 'pages/startup_page.dart';
+import 'playlists/playlist_editor_page.dart';
+import 'playlists/playlists_page.dart';
 
 /// Rotas do dashboard.
 abstract final class Routes {
@@ -18,6 +21,12 @@ abstract final class Routes {
 
   /// Detalhes da TV [id].
   static String device(String id) => '/tvs/$id';
+
+  static const media = '/midia';
+  static const playlists = '/playlists';
+
+  /// Editor da playlist [id].
+  static String playlist(String id) => '/playlists/$id';
 }
 
 /// Roteador que leva cada estado de autenticação para a tela certa.
@@ -57,6 +66,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/tvs/:id',
         builder: (context, state) =>
             DeviceDetailPage(id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: Routes.media,
+        builder: (context, state) => const MediaLibraryPage(),
+      ),
+      GoRoute(
+        path: Routes.playlists,
+        builder: (context, state) => const PlaylistsPage(),
+      ),
+      GoRoute(
+        path: '/playlists/:id',
+        builder: (context, state) =>
+            PlaylistEditorPage(id: state.pathParameters['id']!),
       ),
     ],
   );

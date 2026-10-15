@@ -17,6 +17,7 @@ void main() {
     useTvScreen(tester);
     await tester.pumpWidget(
       TvApp(
+        mediaRoot: fakeMediaRoot,
         credentials: MemoryCredentialStore(),
         discovery: FakeDiscovery([pcSala]),
         api: fakeApi(),
@@ -39,6 +40,7 @@ void main() {
     final discovery = FakeDiscovery();
     await tester.pumpWidget(
       TvApp(
+        mediaRoot: fakeMediaRoot,
         credentials: MemoryCredentialStore(),
         discovery: discovery,
         api: fakeApi(),
@@ -66,6 +68,7 @@ void main() {
       useTvScreen(tester);
       await tester.pumpWidget(
         TvApp(
+          mediaRoot: fakeMediaRoot,
           credentials: MemoryCredentialStore(),
           discovery: FakeDiscovery(),
           api: fakeApi(),
@@ -116,6 +119,7 @@ void main() {
     );
 
     TvApp app(FakeConnector connector, MemoryCredentialStore store) => TvApp(
+          mediaRoot: fakeMediaRoot,
           credentials: store,
           discovery: FakeDiscovery(),
           api: fakeApi(),

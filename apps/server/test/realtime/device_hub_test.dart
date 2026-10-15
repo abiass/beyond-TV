@@ -30,6 +30,7 @@ void main() {
     hub = DeviceHub(
       devices: devices,
       media: MediaStore(db, clock: clock.call),
+      playlists: PlaylistStore(db, MediaStore(db, clock: clock.call)),
       clock: clock.call,
     );
     id = generateId();

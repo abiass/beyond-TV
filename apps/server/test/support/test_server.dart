@@ -15,25 +15,35 @@ const fastHasher = PasswordHasher(cost: 4);
 ///
 /// É encerrado automaticamente no fim do teste.
 class TestServer {
-  TestServer._(this.db, this._server);
+  TestServer._(this.db, this.mediaDir, this._server);
 
   static Future<TestServer> start({
     Clock clock = DateTime.now,
-    Handler Function(Database db)? handler,
+    Handler Function(Database db, String mediaDir)? handler,
   }) async {
     final db = openDatabase();
+    final mediaDir = Directory.systemTemp.createTempSync('beyond_media_').path;
+    addTearDown(() => Directory(mediaDir).deleteSync(recursive: true));
     final server = await shelf_io.serve(
-      handler?.call(db) ??
-          buildHandler(db: db, hasher: fastHasher, clock: clock),
+      handler?.call(db, mediaDir) ??
+          buildHandler(
+            db: db,
+            mediaDir: mediaDir,
+            hasher: fastHasher,
+            clock: clock,
+          ),
       InternetAddress.loopbackIPv4,
       0,
     );
-    final testServer = TestServer._(db, server);
+    final testServer = TestServer._(db, mediaDir, server);
     addTearDown(testServer.close);
     return testServer;
   }
 
   final Database db;
+
+  /// Pasta dos arquivos de mídia (temporária, apagada no fim do teste).
+  final String mediaDir;
   final HttpServer _server;
 
   Uri uri(String path) =>

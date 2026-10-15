@@ -7,16 +7,14 @@ import 'package:go_router/go_router.dart';
 import '../api/api_client.dart';
 import '../api/media.dart';
 import '../auth/auth_controller.dart';
+import '../api/playlists.dart';
+import '../media/media_controller.dart';
+import '../playlists/playlists_controller.dart';
 import '../router.dart';
 import 'devices_controller.dart';
 import 'format_relative.dart';
 import 'remove_device_dialog.dart';
 import 'rename_device_dialog.dart';
-
-/// Sites salvos na biblioteca, para o atalho "Sites salvos".
-final mediaListProvider = FutureProvider.autoDispose<List<Media>>(
-  (ref) => ref.watch(apiClientProvider).listMedia(),
-);
 
 enum _Action { rename, remove }
 
@@ -258,6 +256,14 @@ class _ContentCardState extends ConsumerState<_ContentCard> {
     if (ok && mounted) _url.text = media.url ?? '';
   }
 
+  Future<void> _pickPlaylist(PlaylistSummary playlist) async {
+    final api = ref.read(apiClientProvider);
+    final ok = await _run(
+      () => api.setDevicePlaylist(widget.device.id, playlist.id),
+    );
+    if (ok && mounted) _url.clear();
+  }
+
   Future<void> _stop() async {
     final api = ref.read(apiClientProvider);
     final confirmed = await showDialog<bool>(
@@ -278,18 +284,30 @@ class _ContentCardState extends ConsumerState<_ContentCard> {
       ),
     );
     if (confirmed != true) return;
+    // `mediaId: null` limpa tudo, inclusive a playlist.
     final ok = await _run(() => api.setDeviceMedia(widget.device.id, null));
     if (ok && mounted) _url.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    final saved = ref.watch(mediaListProvider).value ?? const <Media>[];
-    final withUrl = saved.where((m) => m.url != null).toList();
+    final library = ref.watch(mediaProvider).value ?? const <Media>[];
+    final playlists = ref.watch(playlistsProvider).value ?? const [];
+    final device = widget.device;
+    final assigned = device.playlist != null
+        ? 'Playlist: ${device.playlist!.name}'
+        : device.content?.name;
 
     return _Section(
       title: 'Conteúdo',
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            assigned == null ? 'Nada atribuído.' : 'Atribuído: $assigned',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
         Form(
           key: _formKey,
           child: Column(
@@ -341,26 +359,43 @@ class _ContentCardState extends ConsumerState<_ContentCard> {
                   : const Icon(Icons.public),
               label: const Text('Exibir nesta TV'),
             ),
-            if (widget.device.content != null)
+            if (device.content != null || device.playlist != null)
               OutlinedButton(
                 onPressed: _busy ? null : _stop,
                 child: const Text('Parar de exibir'),
               ),
           ],
         ),
-        if (withUrl.isNotEmpty) ...[
+        if (library.isNotEmpty) ...[
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) => DropdownMenu<Media>(
               width: constraints.maxWidth,
-              label: const Text('Sites salvos'),
+              label: const Text('Mídia da biblioteca'),
               enabled: !_busy,
               dropdownMenuEntries: [
-                for (final m in withUrl)
+                for (final m in library)
                   DropdownMenuEntry(value: m, label: m.name),
               ],
               onSelected: (m) {
                 if (m != null) _pick(m);
+              },
+            ),
+          ),
+        ],
+        if (playlists.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) => DropdownMenu<PlaylistSummary>(
+              width: constraints.maxWidth,
+              label: const Text('Playlist'),
+              enabled: !_busy,
+              dropdownMenuEntries: [
+                for (final p in playlists)
+                  DropdownMenuEntry(value: p, label: p.name),
+              ],
+              onSelected: (p) {
+                if (p != null) _pickPlaylist(p);
               },
             ),
           ),
