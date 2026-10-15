@@ -7,27 +7,31 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'api/auth_api.dart';
 import 'api/devices_api.dart';
+import 'api/groups_api.dart';
 import 'api/media_api.dart';
 import 'api/pairing_api.dart';
 import 'api/playlists_api.dart';
+import 'api/schedules_api.dart';
 import 'api/setup_api.dart';
 import 'auth/admins.dart';
 import 'auth/passwords.dart';
 import 'auth/sessions.dart';
 import 'clock.dart';
 import 'devices/devices.dart';
+import 'groups/group_store.dart';
 import 'http/json.dart';
 import 'http/middleware.dart';
 import 'http/rate_limit.dart';
 import 'http/static_site.dart';
 import 'media/media_files.dart';
 import 'media/media_store.dart';
-import 'playlists/playlist_store.dart';
 import 'pairing/pairing_codes.dart';
+import 'playlists/playlist_store.dart';
 import 'realtime/admin_socket.dart';
 import 'realtime/content_sync.dart';
 import 'realtime/device_hub.dart';
 import 'realtime/device_socket.dart';
+import 'schedules/schedule_store.dart';
 
 /// Versão do servidor exposta em `/health`.
 const serverVersion = '0.1.0';
@@ -80,6 +84,8 @@ Handler buildHandler({
   final devices = DeviceStore(db, clock: clock);
   final media = MediaStore(db, clock: clock);
   final playlists = PlaylistStore(db, media, clock: clock);
+  final groups = GroupStore(db, clock: clock);
+  final schedules = ScheduleStore(db, clock: clock);
   final files = MediaFiles(mediaDir);
   final hub = DeviceHub(
     devices: devices,
@@ -89,6 +95,8 @@ Handler buildHandler({
   );
   final sync = ContentSync(
     devices: devices,
+    groups: groups,
+    schedules: schedules,
     media: media,
     playlists: playlists,
     hub: hub,
@@ -107,6 +115,7 @@ Handler buildHandler({
   DevicesApi(
     sessions: sessions,
     devices: devices,
+    groups: groups,
     media: media,
     playlists: playlists,
     hub: hub,
@@ -116,7 +125,6 @@ Handler buildHandler({
     sessions: sessions,
     media: media,
     files: files,
-    playlists: playlists,
     devices: devices,
     hub: hub,
     sync: sync,
@@ -127,6 +135,23 @@ Handler buildHandler({
     media: media,
     devices: devices,
     hub: hub,
+    sync: sync,
+  ).addRoutes(router);
+  GroupsApi(
+    sessions: sessions,
+    groups: groups,
+    devices: devices,
+    media: media,
+    playlists: playlists,
+    hub: hub,
+    sync: sync,
+  ).addRoutes(router);
+  SchedulesApi(
+    sessions: sessions,
+    schedules: schedules,
+    playlists: playlists,
+    devices: devices,
+    groups: groups,
     sync: sync,
   ).addRoutes(router);
   router

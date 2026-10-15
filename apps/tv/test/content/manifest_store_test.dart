@@ -51,4 +51,47 @@ void main() {
     await store.clear();
     expect(await store.load(), isNull);
   });
+
+  test('salva e carrega com agenda', () async {
+    final manifest = ContentManifest(
+      items: [
+        const ContentItem(
+          mediaId: 'm1',
+          kind: MediaKinds.url,
+          name: 'Site',
+          url: 'https://example.local/a',
+        ),
+      ],
+      schedules: [
+        ScheduleRule(
+          id: 'r1',
+          days: {1, 2},
+          startMinute: 8 * 60,
+          endMinute: 9 * 60,
+          priority: 3,
+          target: ScheduleTargets.group,
+          items: const [
+            ContentItem(
+              mediaId: 'm2',
+              kind: MediaKinds.url,
+              name: 'Manhã',
+              url: 'https://example.local/b',
+            ),
+          ],
+        ),
+      ],
+    );
+    await store.save(manifest);
+    final loaded = await store.load();
+    expect(loaded!.revision, manifest.revision);
+    final rule = loaded.schedules.single;
+    expect(rule.id, 'r1');
+    expect(rule.days, {1, 2});
+    expect(rule.items.single.url, 'https://example.local/b');
+    // Segunda-feira 08:30 cai na regra salva.
+    expect(
+      loaded.itemsAt(DateTime(2026, 10, 12, 8, 30)).single.mediaId,
+      'm2',
+    );
+  });
 }

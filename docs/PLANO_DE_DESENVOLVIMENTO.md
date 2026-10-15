@@ -565,14 +565,14 @@ verde.
 | 7.6 | `feat(dashboard): adiciona biblioteca de mídia com upload` | ✅ |
 | 7.7 | `feat(dashboard): adiciona editor de playlist com reordenação` | ✅ |
 
-### Fase 8 — Grupos e agendamento ⬜
-| # | Commit |
-|---|--------|
-| 8.1 | `feat(server): adiciona grupos e atribuição em lote` |
-| 8.2 | `feat(server): adiciona agendamentos com prioridade` |
-| 8.3 | `feat(tv): resolve agenda localmente (funciona offline)` |
-| 8.4 | `feat(dashboard): adiciona telas de grupos e agenda semanal` |
-| 8.5 | `test: cobre resolução de agenda (sobreposição, virada de dia)` |
+### Fase 8 — Grupos e agendamento ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 8.1 | `feat(server): adiciona grupos e atribuição em lote` | ✅ |
+| 8.2 | `feat(server): adiciona agendamentos com prioridade` | ✅ |
+| 8.3 | `feat(tv): resolve agenda localmente (funciona offline)` | ✅ |
+| 8.4 | `feat(dashboard): adiciona telas de grupos e agenda semanal` | ✅ |
+| 8.5 | `test: cobre resolução de agenda (sobreposição, virada de dia)` | ✅ |
 
 ### Fase 9 — Operação remota ⬜
 | # | Commit |

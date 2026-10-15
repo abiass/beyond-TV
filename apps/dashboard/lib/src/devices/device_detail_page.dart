@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api/api_client.dart';
-import '../api/media.dart';
+import '../api/groups.dart';
+import '../api/schedules.dart';
 import '../auth/auth_controller.dart';
-import '../api/playlists.dart';
-import '../media/media_controller.dart';
-import '../playlists/playlists_controller.dart';
+import '../groups/groups_controller.dart';
 import '../router.dart';
+import '../schedules/schedule_summary_tile.dart';
+import '../schedules/schedules_controller.dart';
+import '../widgets/content_picker.dart';
 import 'devices_controller.dart';
 import 'format_relative.dart';
 import 'remove_device_dialog.dart';
@@ -88,6 +90,10 @@ class DeviceDetailPage extends ConsumerWidget {
               _StatusCard(device: device),
               const SizedBox(height: 12),
               _ContentCard(device: device),
+              const SizedBox(height: 12),
+              _GroupCard(device: device),
+              const SizedBox(height: 12),
+              _SchedulesCard(device: device),
               const SizedBox(height: 12),
               _CommandsCard(device: device),
             ],
@@ -177,229 +183,144 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
-class _ContentCard extends ConsumerStatefulWidget {
+class _ContentCard extends ConsumerWidget {
   const _ContentCard({required this.device});
 
   final DeviceSummary device;
 
   @override
-  ConsumerState<_ContentCard> createState() => _ContentCardState();
-}
-
-class _ContentCardState extends ConsumerState<_ContentCard> {
-  final _formKey = GlobalKey<FormState>();
-  late final _url = TextEditingController(text: widget.device.content?.url);
-  final _name = TextEditingController();
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _url.dispose();
-    _name.dispose();
-    super.dispose();
-  }
-
-  /// Executa [call], mostrando o erro da API abaixo do campo.
-  Future<bool> _run(Future<DeviceSummary> Function() call) async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final updated = await call();
-      ref.read(devicesProvider.notifier).replace(updated);
-      if (mounted) setState(() => _busy = false);
-      return true;
-    } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = e.message;
-        });
-      }
-      return false;
-    }
-  }
-
-  Future<void> _show() async {
-    if (!_formKey.currentState!.validate()) return;
+  Widget build(BuildContext context, WidgetRef ref) {
     final api = ref.read(apiClientProvider);
-    final messenger = ScaffoldMessenger.of(context);
-    final id = widget.device.id;
-    final online = widget.device.online;
-    final name = _name.text.trim();
-    final ok = await _run(
-      () => api.setDeviceContentUrl(
-        id,
-        _url.text.trim(),
-        name: name.isEmpty ? null : name,
-      ),
-    );
-    if (!ok) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          online
-              ? 'Conteúdo enviado para a TV.'
-              : 'Conteúdo salvo. A TV vai exibir quando conectar.',
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pick(Media media) async {
-    final api = ref.read(apiClientProvider);
-    final ok = await _run(
-      () => api.setDeviceMedia(widget.device.id, media.id),
-    );
-    if (ok && mounted) _url.text = media.url ?? '';
-  }
-
-  Future<void> _pickPlaylist(PlaylistSummary playlist) async {
-    final api = ref.read(apiClientProvider);
-    final ok = await _run(
-      () => api.setDevicePlaylist(widget.device.id, playlist.id),
-    );
-    if (ok && mounted) _url.clear();
-  }
-
-  Future<void> _stop() async {
-    final api = ref.read(apiClientProvider);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Parar de exibir'),
-        content: Text('A TV ${widget.device.name} vai ficar sem conteúdo.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Parar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    // `mediaId: null` limpa tudo, inclusive a playlist.
-    final ok = await _run(() => api.setDeviceMedia(widget.device.id, null));
-    if (ok && mounted) _url.clear();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final library = ref.watch(mediaProvider).value ?? const <Media>[];
-    final playlists = ref.watch(playlistsProvider).value ?? const [];
-    final device = widget.device;
-    final assigned = device.playlist != null
-        ? 'Playlist: ${device.playlist!.name}'
-        : device.content?.name;
+    final devices = ref.read(devicesProvider.notifier);
+    final id = device.id;
 
     return _Section(
       title: 'Conteúdo',
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Text(
-            assigned == null ? 'Nada atribuído.' : 'Atribuído: $assigned',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
+        ContentPicker(
+          assigned: device.playlist != null
+              ? 'Playlist: ${device.playlist!.name}'
+              : device.content?.name,
+          hasContent: device.content != null || device.playlist != null,
+          initialUrl: device.content?.url,
+          stopMessage: 'A TV ${device.name} vai ficar sem conteúdo.',
+          showLabel: 'Exibir nesta TV',
+          urlSavedMessage: device.online
+              ? 'Conteúdo enviado para a TV.'
+              : 'Conteúdo salvo. A TV vai exibir quando conectar.',
+          onUrl: (url, name) async => devices
+              .replace(await api.setDeviceContentUrl(id, url, name: name)),
+          onMedia: (media) async =>
+              devices.replace(await api.setDeviceMedia(id, media.id)),
+          onPlaylist: (playlist) async =>
+              devices.replace(await api.setDevicePlaylist(id, playlist.id)),
+          // `mediaId: null` limpa tudo, inclusive a playlist.
+          onClear: () async =>
+              devices.replace(await api.setDeviceMedia(id, null)),
         ),
-        Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                controller: _url,
-                maxLength: maxContentUrlLength,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  labelText: 'Endereço do site',
-                  hintText: 'https://example.local/painel',
-                ),
-                validator: (value) => isSafeContentUrl((value ?? '').trim())
-                    ? null
-                    : 'Use um link que comece com http:// ou https://.',
-              ),
-              TextFormField(
-                controller: _name,
-                maxLength: 64,
-                decoration: const InputDecoration(
-                  labelText: 'Nome (opcional)',
-                  hintText: 'Usa o endereço se ficar vazio',
-                ),
-              ),
+      ],
+    );
+  }
+}
+
+class _GroupCard extends ConsumerWidget {
+  const _GroupCard({required this.device});
+
+  final DeviceSummary device;
+
+  Future<void> _change(
+    BuildContext context,
+    WidgetRef ref,
+    int? groupId,
+  ) async {
+    if (groupId == device.groupId) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final devices = ref.read(devicesProvider.notifier);
+    try {
+      devices.replace(
+        await ref.read(apiClientProvider).setDeviceGroup(device.id, groupId),
+      );
+      ref.invalidate(groupsProvider);
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groups = ref.watch(groupsProvider).value ?? const <Group>[];
+    final group = groups.where((g) => g.id == device.groupId).firstOrNull;
+
+    return _Section(
+      title: 'Grupo',
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) => DropdownMenu<int?>(
+            // Recria o campo quando o grupo muda por outro caminho.
+            key: ValueKey(group?.id),
+            width: constraints.maxWidth,
+            label: const Text('Grupo'),
+            initialSelection: group?.id,
+            requestFocusOnTap: false,
+            dropdownMenuEntries: [
+              const DropdownMenuEntry<int?>(value: null, label: 'Nenhum'),
+              for (final g in groups)
+                DropdownMenuEntry<int?>(value: g.id, label: g.name),
             ],
+            onSelected: (groupId) => _change(context, ref, groupId),
           ),
         ),
-        if (_error case final error?)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              error,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            FilledButton.icon(
-              onPressed: _busy ? null : _show,
-              icon: _busy
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.public),
-              label: const Text('Exibir nesta TV'),
-            ),
-            if (device.content != null || device.playlist != null)
-              OutlinedButton(
-                onPressed: _busy ? null : _stop,
-                child: const Text('Parar de exibir'),
-              ),
-          ],
+        const SizedBox(height: 8),
+        Text(
+          'Conteúdo próprio da TV tem prioridade sobre o do grupo.',
+          style: Theme.of(context).textTheme.bodySmall,
         ),
-        if (library.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) => DropdownMenu<Media>(
-              width: constraints.maxWidth,
-              label: const Text('Mídia da biblioteca'),
-              enabled: !_busy,
-              dropdownMenuEntries: [
-                for (final m in library)
-                  DropdownMenuEntry(value: m, label: m.name),
-              ],
-              onSelected: (m) {
-                if (m != null) _pick(m);
-              },
-            ),
-          ),
-        ],
-        if (playlists.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) => DropdownMenu<PlaylistSummary>(
-              width: constraints.maxWidth,
-              label: const Text('Playlist'),
-              enabled: !_busy,
-              dropdownMenuEntries: [
-                for (final p in playlists)
-                  DropdownMenuEntry(value: p, label: p.name),
-              ],
-              onSelected: (p) {
-                if (p != null) _pickPlaylist(p);
-              },
-            ),
-          ),
-        ],
+      ],
+    );
+  }
+}
+
+class _SchedulesCard extends ConsumerWidget {
+  const _SchedulesCard({required this.device});
+
+  final DeviceSummary device;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final own = ref.watch(
+      schedulesProvider((deviceId: device.id, groupId: null)),
+    );
+    final groupId = device.groupId;
+    final inherited = groupId == null
+        ? const AsyncData<List<Schedule>>([])
+        : ref.watch(schedulesProvider((deviceId: null, groupId: groupId)));
+
+    final failure = own.error ?? inherited.error;
+    final loading = own.isLoading || inherited.isLoading;
+    final all = [...?own.value, ...?inherited.value]..sort(compareByPrecedence);
+
+    return _Section(
+      title: 'Agendamentos',
+      children: [
+        if (failure != null)
+          Text(
+            failure is ApiException
+                ? failure.message
+                : 'Não foi possível carregar os agendamentos.',
+          )
+        else if (loading && all.isEmpty)
+          const LinearProgressIndicator()
+        else if (all.isEmpty)
+          const Text('Nenhum agendamento.')
+        else
+          for (final s in all)
+            ScheduleSummaryTile(s, origin: s.isDevice ? 'TV' : 'Grupo'),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => context.go(Routes.scheduleFor(deviceId: device.id)),
+          icon: const Icon(Icons.calendar_month_outlined),
+          label: const Text('Abrir agenda'),
+        ),
       ],
     );
   }

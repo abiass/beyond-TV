@@ -11,7 +11,6 @@ import '../logging.dart';
 import '../media/media_files.dart';
 import '../media/media_store.dart';
 import '../media/media_validation.dart';
-import '../playlists/playlist_store.dart';
 import '../realtime/content_sync.dart';
 import '../realtime/device_hub.dart';
 
@@ -30,14 +29,12 @@ class MediaApi {
     required SessionStore sessions,
     required MediaStore media,
     required MediaFiles files,
-    required PlaylistStore playlists,
     required DeviceStore devices,
     required DeviceHub hub,
     required ContentSync sync,
   }) : _sessions = sessions,
        _media = media,
        _files = files,
-       _playlists = playlists,
        _devices = devices,
        _hub = hub,
        _sync = sync;
@@ -45,7 +42,6 @@ class MediaApi {
   final SessionStore _sessions;
   final MediaStore _media;
   final MediaFiles _files;
-  final PlaylistStore _playlists;
   final DeviceStore _devices;
   final DeviceHub _hub;
   final ContentSync _sync;
@@ -161,32 +157,24 @@ class MediaApi {
     final id = request.params['id']!;
     final current = _media.find(id);
     if (current == null) throw _notFound;
-    // Calcula antes de apagar: o CASCADE tira a mídia das playlists.
+    // Calcula antes de apagar: o SET NULL zera a coluna das TVs.
     final direct = _devices.devicesShowing(id);
-    final viaPlaylist = _viaPlaylist(id);
     _media.delete(id);
     final sha256 = current.sha256;
     if (sha256 != null) {
       await _files.deleteIfUnused(sha256, _media.isSha256InUse);
     }
-    _notify(direct, viaPlaylist);
+    _notify(direct);
     _log.info(LogEvent('mídia removida', {'mediaId': id}));
     return Response(204);
   }
 
-  /// TVs que exibem a mídia dentro de uma playlist.
-  Set<String> _viaPlaylist(String mediaId) => {
-    for (final playlistId in _playlists.playlistsContaining(mediaId))
-      ..._devices.devicesShowingPlaylist(playlistId),
-  };
+  void _refresh(String mediaId) => _notify(_devices.devicesShowing(mediaId));
 
-  void _refresh(String mediaId) =>
-      _notify(_devices.devicesShowing(mediaId), _viaPlaylist(mediaId));
-
-  /// Manda `content.sync` a todas as TVs afetadas e `device.state` às que
+  /// Manda `content.sync` às TVs cujo manifesto mudou e `device.state` às que
   /// exibem a mídia avulsa (o resumo das outras não muda).
-  void _notify(Iterable<String> direct, Iterable<String> viaPlaylist) {
-    _sync.syncDevices({...direct, ...viaPlaylist});
+  void _notify(Iterable<String> direct) {
+    _sync.syncOnline();
     for (final deviceId in direct) {
       final row = _devices.find(deviceId);
       if (row != null) {

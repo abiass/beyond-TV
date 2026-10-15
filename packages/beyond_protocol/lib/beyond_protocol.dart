@@ -13,3 +13,4 @@ export 'src/pairing.dart';
 export 'src/playlists.dart';
 export 'src/protocol_exception.dart';
 export 'src/realtime.dart';
+export 'src/schedules.dart';

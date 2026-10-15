@@ -34,7 +34,7 @@ class HomePage extends ConsumerWidget {
           children: [
             Icon(Icons.tv, color: brandAccent),
             SizedBox(width: 8),
-            Text('Beyond TV'),
+            Flexible(child: Text('Beyond TV', overflow: TextOverflow.ellipsis)),
           ],
         ),
         actions: [
@@ -47,6 +47,16 @@ class HomePage extends ConsumerWidget {
             tooltip: 'Playlists',
             icon: const Icon(Icons.playlist_play),
             onPressed: () => context.go(Routes.playlists),
+          ),
+          IconButton(
+            tooltip: 'Grupos',
+            icon: const Icon(Icons.workspaces_outline),
+            onPressed: () => context.go(Routes.groups),
+          ),
+          IconButton(
+            tooltip: 'Agenda',
+            icon: const Icon(Icons.calendar_month_outlined),
+            onPressed: () => context.go(Routes.schedule),
           ),
           const SizedBox(width: 8),
           _LiveIndicator(live: live),

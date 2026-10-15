@@ -115,7 +115,7 @@ class PlaylistsApi {
     }
 
     _playlists.replaceItems(id, items);
-    _sync.syncDevices(_devices.devicesShowingPlaylist(id));
+    _sync.syncOnline();
     return jsonResponse(_json(_find(request)));
   }
 
@@ -125,7 +125,7 @@ class PlaylistsApi {
     // Calcula antes de apagar: o SET NULL zera a coluna das TVs.
     final showing = _devices.devicesShowingPlaylist(id);
     _playlists.delete(id);
-    _sync.syncDevices(showing);
+    _sync.syncOnline();
     _publishStates(showing);
     _log.info(LogEvent('playlist removida', {'playlistId': id}));
     return Response(204);

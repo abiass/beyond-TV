@@ -1,12 +1,18 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:beyond_tv/src/content/content_controller.dart';
 import 'package:beyond_tv/src/content/manifest_store.dart';
 import 'package:beyond_tv/src/device/credentials.dart';
+import 'package:beyond_tv/src/media/media_cache.dart';
 import 'package:beyond_tv/src/realtime/backoff.dart';
 import 'package:beyond_tv/src/realtime/device_connection.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import '../support/fake_socket.dart';
 import '../support/fakes.dart';
@@ -40,7 +46,11 @@ void main() {
   late DeviceConnection connection;
   late ContentController controller;
 
-  Future<void> setUpController([ContentManifest? saved]) async {
+  Future<void> setUpController([
+    ContentManifest? saved,
+    MediaCache? cache,
+    DateTime Function()? now,
+  ]) async {
     connector = FakeConnector();
     store = MemoryManifestStore(saved);
     connection = DeviceConnection(
@@ -56,7 +66,12 @@ void main() {
       heartbeatEvery: const Duration(milliseconds: 20),
       currentItem: () => controller.currentUrl,
     );
-    controller = ContentController(store: store, connection: connection);
+    controller = ContentController(
+      store: store,
+      connection: connection,
+      cache: cache,
+      now: now,
+    );
     await controller.start();
     connection.start();
     await _wait();
@@ -167,5 +182,132 @@ void main() {
     );
     await _wait();
     expect([for (final i in controller.manifest.items) i.mediaId], ['ok']);
+  });
+
+  group('agenda', () {
+    ScheduleRule rule(String id, List<ContentItem> items) => ScheduleRule(
+          id: id,
+          days: {1, 2, 3, 4, 5, 6, 7},
+          startMinute: 8 * 60,
+          endMinute: 9 * 60,
+          priority: 0,
+          target: ScheduleTargets.device,
+          items: items,
+        );
+
+    test('descarta itens inseguros dentro das regras', () async {
+      await setUpController();
+      connector.last.serverSend(
+        _sync(
+          ContentManifest(
+            items: const [
+              ContentItem(
+                mediaId: 'p',
+                kind: MediaKinds.url,
+                name: 'p',
+                url: 'https://example.local/p',
+              ),
+            ],
+            schedules: [
+              rule('r1', [
+                const ContentItem(
+                  mediaId: 'ok',
+                  kind: MediaKinds.url,
+                  name: 'ok',
+                  url: 'https://example.local/ok',
+                ),
+                const ContentItem(
+                  mediaId: 'js',
+                  kind: MediaKinds.url,
+                  name: 'js',
+                  url: 'javascript:alert(1)',
+                ),
+                const ContentItem(
+                  mediaId: 'sha',
+                  kind: MediaKinds.image,
+                  name: 'sha',
+                  sha256: '../x',
+                ),
+              ]),
+            ],
+          ),
+        ),
+      );
+      await _wait();
+      final rules = controller.manifest.schedules;
+      expect(rules.single.id, 'r1');
+      expect([for (final i in rules.single.items) i.mediaId], ['ok']);
+      expect(store.saved!.schedules.single.items, hasLength(1));
+    });
+
+    test('o controlador segue a faixa pelo relógio injetado', () async {
+      var now = DateTime(2026, 10, 14, 7, 0);
+      final manifest = ContentManifest(
+        items: const [
+          ContentItem(
+            mediaId: 'p',
+            kind: MediaKinds.url,
+            name: 'p',
+            url: 'https://example.local/p',
+          ),
+        ],
+        schedules: [
+          rule('r1', const [
+            ContentItem(
+              mediaId: 'a',
+              kind: MediaKinds.url,
+              name: 'a',
+              url: 'https://example.local/a',
+            ),
+          ]),
+        ],
+      );
+      await setUpController(manifest, null, () => now);
+      expect(controller.currentUrl, 'https://example.local/p');
+      now = DateTime(2026, 10, 14, 8, 30);
+      await controller.start();
+      expect(controller.currentUrl, 'https://example.local/a');
+    });
+
+    test('baixa e preserva os arquivos de todos os horários', () async {
+      final dir = await Directory.systemTemp.createTemp('ctrl_cache');
+      addTearDown(() => dir.delete(recursive: true));
+      String shaOf(String c) => sha256.convert(utf8.encode(c)).toString();
+      ContentItem image(String c) => ContentItem(
+            mediaId: 'img-$c',
+            kind: MediaKinds.image,
+            name: c,
+            sha256: shaOf(c),
+          );
+      final requested = <String>[];
+      final cache = MediaCache(
+        root: dir,
+        client: MockClient((request) async {
+          requested.add(request.url.path);
+          final content =
+              RegExp(r'img-(\w+)').firstMatch(request.url.path)![1]!;
+          return http.Response.bytes(utf8.encode(content), 200);
+        }),
+      );
+      // Arquivo velho que ninguém usa deve ser podado.
+      File('${dir.path}/${'f' * 64}').writeAsStringSync('velho');
+      await setUpController(
+        ContentManifest(
+          items: [image('padrao')],
+          schedules: [
+            rule('r1', [image('agendada')]),
+          ],
+        ),
+        cache,
+        () => DateTime(2026, 10, 14, 7, 0),
+      );
+      await _wait(200);
+
+      expect(requested, hasLength(2));
+      expect(File('${dir.path}/${shaOf('padrao')}').existsSync(), isTrue);
+      expect(File('${dir.path}/${shaOf('agendada')}').existsSync(), isTrue);
+      expect(File('${dir.path}/${'f' * 64}').existsSync(), isFalse);
+      expect(controller.isReady(image('agendada')), isTrue);
+    });
   });
 }

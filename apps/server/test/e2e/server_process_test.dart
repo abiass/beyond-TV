@@ -391,6 +391,56 @@ void main() {
       },
     );
 
+    test('grupo e agendamento chegam à TV no content.sync', () async {
+      final (_, playlists) = await req('GET', '/api/v1/playlists');
+      final playlistId =
+          (playlists['playlists']! as List)
+                  .cast<Map<String, Object?>>()
+                  .first['id']!
+              as String;
+      final (grupoStatus, grupo) = await req(
+        'POST',
+        '/api/v1/groups',
+        body: {'name': 'Salão'},
+      );
+      expect(grupoStatus, 201);
+      final groupId = grupo['id']! as int;
+      final (membrosStatus, _) = await req(
+        'PUT',
+        '/api/v1/groups/$groupId/devices',
+        body: {
+          'deviceIds': [deviceId],
+        },
+      );
+      expect(membrosStatus, 200);
+
+      final sync = tv.next(MessageTypes.contentSync);
+      final (criado, regra) = await req(
+        'POST',
+        '/api/v1/schedules',
+        body: {
+          'name': 'Almoço',
+          'playlistId': playlistId,
+          'groupId': groupId,
+          'days': [1, 2, 3, 4, 5, 6, 7],
+          'start': '11:00',
+          'end': '14:00',
+          'priority': 10,
+        },
+      );
+
+      expect(criado, 201);
+      final payload = (await sync)['payload']! as Map;
+      final schedules = (payload['schedules']! as List)
+          .cast<Map<Object?, Object?>>();
+      expect(schedules, hasLength(1));
+      expect(schedules.single['id'], regra['id']);
+      expect(schedules.single['target'], 'group');
+      expect(schedules.single['start'], '11:00');
+      expect(schedules.single['items'], hasLength(2));
+      expect(payload['items'], hasLength(2));
+    });
+
     test('token errado em /ws/device é recusado com 4401', () async {
       try {
         final ws = await conectar(WsPaths.device, {

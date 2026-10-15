@@ -1,3 +1,4 @@
+import 'package:beyond_dashboard/src/api/groups.dart';
 import 'package:beyond_dashboard/src/api/playlists.dart';
 import 'package:beyond_dashboard/src/api/media.dart';
 import 'package:beyond_protocol/beyond_protocol.dart';
@@ -253,5 +254,38 @@ void main() {
 
     expect(api.devices[1].content?.mediaId, 'img');
     expect(find.text('Atribuído: Promoção'), findsOneWidget);
+  });
+
+  testWidgets('trocar o grupo chama setDeviceGroup e avisa da prioridade',
+      (tester) async {
+    api.groups.add(
+      Group(
+        id: 3,
+        name: 'Matriz',
+        deviceIds: [],
+        createdAt: DateTime.utc(2026, 10, 1),
+      ),
+    );
+    await openDetail(tester, 'Recepção');
+    expect(
+      find.text('Conteúdo próprio da TV tem prioridade sobre o do grupo.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byType(DropdownMenu<int?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Matriz').last);
+    await tester.pumpAndSettle();
+
+    expect(api.deviceGroupCalls, [('b', 3)]);
+    expect(api.devices[1].groupId, 3);
+
+    await tester.tap(find.byType(DropdownMenu<int?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nenhum').last);
+    await tester.pumpAndSettle();
+
+    expect(api.deviceGroupCalls.last, ('b', null));
+    expect(api.devices[1].groupId, isNull);
   });
 }

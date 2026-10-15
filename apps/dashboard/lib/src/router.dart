@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import 'auth/auth_controller.dart';
 import 'devices/device_detail_page.dart';
+import 'groups/group_detail_page.dart';
+import 'groups/groups_page.dart';
 import 'media/media_library_page.dart';
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
@@ -11,6 +13,7 @@ import 'pages/setup_page.dart';
 import 'pages/startup_page.dart';
 import 'playlists/playlist_editor_page.dart';
 import 'playlists/playlists_page.dart';
+import 'schedules/schedule_page.dart';
 
 /// Rotas do dashboard.
 abstract final class Routes {
@@ -27,6 +30,22 @@ abstract final class Routes {
 
   /// Editor da playlist [id].
   static String playlist(String id) => '/playlists/$id';
+
+  static const groups = '/grupos';
+
+  /// Detalhes do grupo [id].
+  static String group(int id) => '/grupos/$id';
+
+  static const schedule = '/agenda';
+
+  /// Agenda semanal de uma TV ([deviceId]) ou de um grupo ([groupId]).
+  static String scheduleFor({String? deviceId, int? groupId}) => Uri(
+        path: schedule,
+        queryParameters: {
+          if (deviceId != null) 'deviceId': deviceId,
+          if (groupId != null) 'groupId': '$groupId',
+        },
+      ).toString();
 }
 
 /// Roteador que leva cada estado de autenticação para a tela certa.
@@ -79,6 +98,23 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/playlists/:id',
         builder: (context, state) =>
             PlaylistEditorPage(id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: Routes.groups,
+        builder: (context, state) => const GroupsPage(),
+      ),
+      GoRoute(
+        path: '/grupos/:id',
+        builder: (context, state) => GroupDetailPage(
+          id: int.tryParse(state.pathParameters['id']!) ?? -1,
+        ),
+      ),
+      GoRoute(
+        path: Routes.schedule,
+        builder: (context, state) => SchedulePage(
+          deviceId: state.uri.queryParameters['deviceId'],
+          groupId: int.tryParse(state.uri.queryParameters['groupId'] ?? ''),
+        ),
       ),
     ],
   );

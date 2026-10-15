@@ -36,6 +36,7 @@ class TvApp extends StatelessWidget {
     this.videoSurface = defaultVideoSurface,
     this.mediaRoot = _defaultMediaRoot,
     this.mediaClient,
+    this.now,
   })  : discovery = discovery ?? const UdpServerDiscovery(),
         api = api ?? TvApi(),
         deviceInfo = deviceInfo ?? const PlatformDeviceInfoSource(),
@@ -58,6 +59,9 @@ class TvApp extends StatelessWidget {
 
   /// Cliente HTTP do cache; os testes injetam um falso.
   final http.Client Function()? mediaClient;
+
+  /// Relógio da agenda; os testes injetam um falso.
+  final DateTime Function()? now;
 
   static Future<Directory> _defaultMediaRoot() async {
     final base = await getApplicationSupportDirectory();
@@ -115,6 +119,7 @@ class TvApp extends StatelessWidget {
       connection: connection,
       credentials: credentials,
       cache: cache,
+      now: now,
     );
     return PlayerPage(
       content: content,

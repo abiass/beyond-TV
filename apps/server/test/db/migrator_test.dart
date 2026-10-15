@@ -82,13 +82,14 @@ void main() {
     expect(db.userVersion, 0);
   });
 
-  test('migrações 2 e 3 preservam TVs existentes com media_id nulo', () {
+  test('migrações 2 a 4 preservam TVs e grupos existentes', () {
     migrate(db, migrations.take(1).toList());
     db.execute(
       "INSERT INTO devices (id, name, token_hash) VALUES ('tv1', 'TV', 'h')",
     );
+    db.execute("INSERT INTO groups (name) VALUES ('G')");
 
-    expect(migrate(db, migrations), [2, 3]);
+    expect(migrate(db, migrations), [2, 3, 4]);
 
     final row = db
         .select('SELECT name, media_id, playlist_id FROM devices')
@@ -96,6 +97,10 @@ void main() {
     expect(row['name'], 'TV');
     expect(row['media_id'], isNull);
     expect(row['playlist_id'], isNull);
+    final group = db.select('SELECT name, media_id, playlist_id FROM groups');
+    expect(group.single['name'], 'G');
+    expect(group.single['media_id'], isNull);
+    expect(group.single['playlist_id'], isNull);
   });
 
   group('openDatabase', () {

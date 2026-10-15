@@ -43,12 +43,23 @@ class DeviceHub {
   final _connections = <String, DeviceConnection>{};
   final _currentItems = <String, String>{};
   final _lastTouch = <String, DateTime>{};
+  final _sentRevisions = <String, String>{};
   final _events = StreamController<Envelope>.broadcast();
 
   /// Eventos para o `/ws/admin`.
   Stream<Envelope> get events => _events.stream;
 
   bool isOnline(String deviceId) => _connections.containsKey(deviceId);
+
+  /// Ids das TVs conectadas agora.
+  List<String> get onlineIds => _connections.keys.toList();
+
+  /// `revision` do último `content.sync` enviado à TV nesta conexão.
+  String? sentRevisionOf(String deviceId) => _sentRevisions[deviceId];
+
+  /// Anota o `revision` enviado à TV [deviceId].
+  void rememberRevision(String deviceId, String revision) =>
+      _sentRevisions[deviceId] = revision;
 
   /// O que a TV informou estar exibindo; some quando ela desconecta.
   String? currentItemOf(String deviceId) => _currentItems[deviceId];
@@ -92,6 +103,7 @@ class DeviceHub {
   void attach(String deviceId, DeviceConnection conn) {
     final old = _connections[deviceId];
     _connections[deviceId] = conn;
+    _sentRevisions.remove(deviceId);
     if (old != null && !identical(old, conn)) {
       _log.info(LogEvent('conexão substituída', {'deviceId': deviceId}));
       unawaited(old.close(WsCloseCodes.replaced, 'replaced'));
@@ -105,6 +117,7 @@ class DeviceHub {
     _connections.remove(deviceId);
     _currentItems.remove(deviceId);
     _lastTouch.remove(deviceId);
+    _sentRevisions.remove(deviceId);
     final now = _clock();
     _devices.touch(deviceId, now);
     publish(MessageTypes.deviceOffline, {
@@ -118,6 +131,7 @@ class DeviceHub {
     final conn = _connections.remove(deviceId);
     _currentItems.remove(deviceId);
     _lastTouch.remove(deviceId);
+    _sentRevisions.remove(deviceId);
     if (conn != null) unawaited(conn.close(closeCode, 'disconnected'));
   }
 

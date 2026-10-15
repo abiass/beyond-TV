@@ -9,6 +9,7 @@ import '../media/media_cache.dart';
 import '../player/web_player.dart';
 import '../realtime/backoff.dart';
 import '../realtime/device_connection.dart';
+import 'active_content.dart';
 import 'manifest_store.dart';
 
 /// Guarda o que a TV exibe e executa as mensagens do servidor:
@@ -22,7 +23,10 @@ class ContentController extends ChangeNotifier {
     this.cache,
     this.backoffFactory = Backoff.new,
     this.wait = Future.delayed,
-  });
+    DateTime Function()? now,
+  }) : _active = ActiveContent(now: now) {
+    _active.addListener(_onActiveChanged);
+  }
 
   final ManifestStore store;
   final DeviceConnection connection;
@@ -37,6 +41,7 @@ class ContentController extends ChangeNotifier {
   final Backoff Function() backoffFactory;
   final Future<void> Function(Duration) wait;
 
+  final ActiveContent _active;
   ContentManifest _manifest = ContentManifest.empty;
   StreamSubscription<Envelope>? _subscription;
   WebPlayerController? _player;
@@ -52,12 +57,27 @@ class ContentController extends ChangeNotifier {
 
   ContentManifest get manifest => _manifest;
 
+  /// Itens da agenda em vigor agora (padrão ou regra ativa).
+  List<ContentItem> get activeItems => _active.items;
+
+  /// Muda quando a rotação precisa recomeçar (manifesto ou faixa nova).
+  int get activeVersion => _active.version;
+
+  void _onActiveChanged() {
+    if (!_disposed) notifyListeners();
+  }
+
+  void _setManifest(ContentManifest manifest) {
+    _manifest = manifest;
+    _active.setManifest(manifest);
+  }
+
   /// Nome do overlay de identificação, enquanto estiver visível.
   String? get identifyName => _identifyName;
 
   /// URL do primeiro item `url`, ou `null` sem conteúdo.
   String? get currentUrl {
-    for (final item in _manifest.items) {
+    for (final item in _active.items) {
       if (item.kind == MediaKinds.url && item.url != null) return item.url;
     }
     return null;
@@ -97,7 +117,7 @@ class ContentController extends ChangeNotifier {
     final saved = await store.load();
     // Um sync que chegou durante a leitura é mais novo que o disco.
     if (saved != null && !_synced && !_disposed) {
-      _manifest = saved;
+      _setManifest(saved);
       _startMediaSync(saved);
       notifyListeners();
     }
@@ -145,13 +165,26 @@ class ContentController extends ChangeNotifier {
     _synced = true;
     if (incoming.revision != _manifest.revision) {
       // Defesa extra: o servidor já valida, mas a TV não confia.
+      List<ContentItem> keepSafe(List<ContentItem> items) => [
+            for (final item in items)
+              if (_isSafe(item)) item,
+          ];
       final safe = ContentManifest(
-        items: [
-          for (final item in incoming.items)
-            if (_isSafe(item)) item,
+        items: keepSafe(incoming.items),
+        schedules: [
+          for (final rule in incoming.schedules)
+            ScheduleRule(
+              id: rule.id,
+              days: rule.days,
+              startMinute: rule.startMinute,
+              endMinute: rule.endMinute,
+              priority: rule.priority,
+              target: rule.target,
+              items: keepSafe(rule.items),
+            ),
         ],
       );
-      _manifest = safe;
+      _setManifest(safe);
       _startMediaSync(safe);
       notifyListeners();
       unawaited(_save(safe));
@@ -175,7 +208,7 @@ class ContentController extends ChangeNotifier {
     final run = ++_mediaRun;
     if (cache == null) return;
     final shas = {
-      for (final item in manifest.items)
+      for (final item in manifest.allItems)
         if (item.sha256 != null) item.sha256!,
     };
     _ready.removeWhere((sha) => !shas.contains(sha));
@@ -193,7 +226,7 @@ class ContentController extends ChangeNotifier {
     final base = credentials.server.resolve('/');
     final backoff = backoffFactory();
     final pending = <String, ContentItem>{
-      for (final item in manifest.items)
+      for (final item in manifest.allItems)
         if (item.sha256 != null) item.sha256!: item,
     };
     var first = true;
@@ -280,6 +313,7 @@ class ContentController extends ChangeNotifier {
     _disposed = true;
     cache?.close();
     _identifyTimer?.cancel();
+    _active.dispose();
     unawaited(_subscription?.cancel());
     connection.removeListener(_onConnectionChanged);
     super.dispose();

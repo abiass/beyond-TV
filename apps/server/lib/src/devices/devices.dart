@@ -89,6 +89,13 @@ class DeviceStore {
     return _db.updatedRows > 0;
   }
 
+  /// Põe a TV [id] no grupo [groupId] (`null` tira do grupo). Devolve `false`
+  /// se a TV não existe; o grupo precisa existir (validado pela API).
+  bool setGroup(String id, int? groupId) {
+    _db.execute('UPDATE devices SET group_id = ? WHERE id = ?', [groupId, id]);
+    return _db.updatedRows > 0;
+  }
+
   /// Define a mídia exibida pela TV [deviceId] (`null` limpa).
   /// Devolve `false` se a TV não existe.
   bool setMedia(String deviceId, String? mediaId) =>

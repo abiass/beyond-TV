@@ -198,6 +198,31 @@ void main() {
 
     test('playlistId nulo limpa e manda manifesto vazio', () async {
       final id = await createPlaylist();
+      // Playlist vazia não mudaria o manifesto (e o revision só muda com
+      // conteúdo), então ela precisa de um item.
+      final media =
+          jsonBody(
+                await server.post(
+                  '/api/v1/media',
+                  json: {
+                    'kind': 'url',
+                    'url': 'https://a.local/p',
+                    'name': 'P',
+                  },
+                  headers: admin,
+                ),
+              )!
+              as Map;
+      await server.send(
+        'PUT',
+        '/api/v1/playlists/$id/items',
+        json: {
+          'items': [
+            {'mediaId': media['id']},
+          ],
+        },
+        headers: admin,
+      );
       await connectTv();
       await put({'playlistId': id});
       await tvInbox.nextOfType(MessageTypes.contentSync);

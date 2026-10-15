@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:beyond_dashboard/src/api/api_client.dart';
+import 'package:beyond_dashboard/src/api/groups.dart';
 import 'package:beyond_dashboard/src/api/media.dart';
 import 'package:beyond_dashboard/src/api/playlists.dart';
+import 'package:beyond_dashboard/src/api/schedules.dart';
 import 'package:beyond_dashboard/src/app.dart';
 import 'package:beyond_dashboard/src/auth/auth_controller.dart';
 import 'package:beyond_dashboard/src/media/file_picker.dart';
@@ -380,6 +382,259 @@ class FakeApi implements ApiClient {
     );
   }
 
+  /// Grupos que o servidor falso conhece.
+  final groups = <Group>[];
+
+  /// Agendamentos que o servidor falso conhece.
+  final schedules = <Schedule>[];
+
+  /// Chamadas de [setGroupMembers], como `(groupId, deviceIds)`.
+  final memberCalls = <(int, List<String>)>[];
+
+  /// Chamadas de [setGroupContent], como `(groupId, corpo)`.
+  final groupContentCalls = <(int, Map<String, String?>)>[];
+
+  /// Chamadas de [setDeviceGroup], como `(deviceId, groupId)`.
+  final deviceGroupCalls = <(String, int?)>[];
+
+  /// Agendamentos enviados a [createSchedule] e [updateSchedule].
+  final scheduleCreated = <Map<String, Object?>>[];
+  final scheduleUpdated = <(String, Map<String, Object?>)>[];
+  final scheduleDeleted = <String>[];
+
+  int _groupSeq = 0;
+
+  int _groupIndex(int id) {
+    final i = groups.indexWhere((g) => g.id == id);
+    if (i < 0) {
+      throw const ApiException(
+        'Grupo não encontrado.',
+        code: 'not_found',
+        status: 404,
+      );
+    }
+    return i;
+  }
+
+  void _checkGroupName(String name, {int? except}) {
+    if (groups.any(
+      (g) => g.id != except && g.name.toLowerCase() == name.toLowerCase(),
+    )) {
+      throw const ApiException(
+        'Esse nome já está em uso.',
+        code: 'name_taken',
+        status: 409,
+      );
+    }
+  }
+
+  Group _withGroup(
+    Group g, {
+    String? name,
+    List<String>? deviceIds,
+    ContentItem? content,
+    PlaylistRef? playlist,
+    bool setContent = false,
+  }) =>
+      Group(
+        id: g.id,
+        name: name ?? g.name,
+        createdAt: g.createdAt,
+        deviceIds: deviceIds ?? g.deviceIds,
+        content: setContent ? content : g.content,
+        playlist: setContent ? playlist : g.playlist,
+      );
+
+  @override
+  Future<List<Group>> listGroups() async {
+    _maybeFail();
+    return [...groups]..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
+  Future<Group> createGroup(String name) async {
+    _maybeFail();
+    _checkGroupName(name);
+    final g = Group(
+      id: ++_groupSeq + 100,
+      name: name,
+      createdAt: DateTime.utc(2026, 10, 2),
+    );
+    groups.add(g);
+    return g;
+  }
+
+  @override
+  Future<Group> renameGroup(int id, String name) async {
+    _maybeFail();
+    final i = _groupIndex(id);
+    _checkGroupName(name, except: id);
+    return groups[i] = _withGroup(groups[i], name: name);
+  }
+
+  @override
+  Future<void> deleteGroup(int id) async {
+    _maybeFail();
+    groups.removeAt(_groupIndex(id));
+    schedules.removeWhere((s) => s.groupId == id);
+  }
+
+  @override
+  Future<Group> setGroupMembers(int id, List<String> deviceIds) async {
+    _maybeFail();
+    memberCalls.add((id, deviceIds));
+    final i = _groupIndex(id);
+    for (var j = 0; j < groups.length; j++) {
+      groups[j] = _withGroup(
+        groups[j],
+        deviceIds: j == i
+            ? deviceIds
+            : [
+                for (final d in groups[j].deviceIds)
+                  if (!deviceIds.contains(d)) d,
+              ],
+      );
+    }
+    for (var j = 0; j < devices.length; j++) {
+      final d = devices[j];
+      final inGroup = deviceIds.contains(d.id);
+      if (inGroup || d.groupId == id) {
+        devices[j] = _withGroupId(d, inGroup ? id : null);
+      }
+    }
+    return groups[i];
+  }
+
+  DeviceSummary _withGroupId(DeviceSummary d, int? groupId) => DeviceSummary(
+        id: d.id,
+        name: d.name,
+        online: d.online,
+        createdAt: d.createdAt,
+        info: d.info,
+        groupId: groupId,
+        lastSeenAt: d.lastSeenAt,
+        currentItem: d.currentItem,
+        content: d.content,
+        playlist: d.playlist,
+      );
+
+  @override
+  Future<Group> setGroupContent(
+    int id, {
+    String? mediaId,
+    String? playlistId,
+    String? url,
+    String? name,
+  }) async {
+    _maybeFail();
+    groupContentCalls.add(
+      (
+        id,
+        {
+          if (mediaId != null) 'mediaId': mediaId,
+          if (playlistId != null) 'playlistId': playlistId,
+          if (url != null) 'url': url,
+          if (name != null) 'name': name,
+        },
+      ),
+    );
+    final i = _groupIndex(id);
+    if (playlistId != null) {
+      final p = playlists[_playlistIndex(playlistId)];
+      return groups[i] = _withGroup(
+        groups[i],
+        playlist: PlaylistRef(id: p.id, name: p.name),
+        setContent: true,
+      );
+    }
+    if (url != null) {
+      return groups[i] = _withGroup(
+        groups[i],
+        content: ContentItem(
+          mediaId: 'm-url',
+          kind: MediaKinds.url,
+          name: name ?? url,
+          url: url,
+        ),
+        setContent: true,
+      );
+    }
+    final m = mediaId == null ? null : media.firstWhere((m) => m.id == mediaId);
+    return groups[i] = _withGroup(
+      groups[i],
+      content: m == null
+          ? null
+          : ContentItem(mediaId: m.id, kind: m.kind, name: m.name, url: m.url),
+      setContent: true,
+    );
+  }
+
+  @override
+  Future<DeviceSummary> setDeviceGroup(String deviceId, int? groupId) async {
+    _maybeFail();
+    deviceGroupCalls.add((deviceId, groupId));
+    final i = devices.indexWhere((d) => d.id == deviceId);
+    return devices[i] = _withGroupId(devices[i], groupId);
+  }
+
+  @override
+  Future<List<Schedule>> listSchedules({String? deviceId, int? groupId}) async {
+    _maybeFail();
+    return [
+      for (final s in schedules)
+        if ((deviceId == null || s.deviceId == deviceId) &&
+            (groupId == null || s.groupId == groupId))
+          s,
+    ];
+  }
+
+  @override
+  Future<Schedule> createSchedule(Schedule schedule) async {
+    _maybeFail();
+    scheduleCreated.add(schedule.toJson());
+    final created = Schedule(
+      id: 'sc${++_seq}',
+      name: schedule.name,
+      playlistId: schedule.playlistId,
+      deviceId: schedule.deviceId,
+      groupId: schedule.groupId,
+      days: schedule.days,
+      startMinute: schedule.startMinute,
+      endMinute: schedule.endMinute,
+      priority: schedule.priority,
+      createdAt: DateTime.utc(2026, 10, 2).add(Duration(minutes: _seq)),
+    );
+    schedules.add(created);
+    return created;
+  }
+
+  @override
+  Future<Schedule> updateSchedule(String id, Schedule schedule) async {
+    _maybeFail();
+    scheduleUpdated.add((id, schedule.toJson()));
+    final i = schedules.indexWhere((s) => s.id == id);
+    final old = schedules[i];
+    return schedules[i] = Schedule(
+      id: id,
+      name: schedule.name,
+      playlistId: schedule.playlistId,
+      deviceId: old.deviceId,
+      groupId: old.groupId,
+      days: schedule.days,
+      startMinute: schedule.startMinute,
+      endMinute: schedule.endMinute,
+      priority: schedule.priority,
+      createdAt: old.createdAt,
+    );
+  }
+
+  @override
+  Future<void> deleteSchedule(String id) async {
+    _maybeFail();
+    scheduleDeleted.add(id);
+    schedules.removeWhere((s) => s.id == id);
+  }
+
   @override
   Future<void> sendCommand(String id, String type) async {
     _maybeFail();
@@ -409,12 +664,13 @@ Widget dashboardWith(
   FakeAdminSocket? socket,
   FilePicker? picker,
 }) {
-  final fake = socket ?? FakeAdminSocket();
   return ProviderScope(
     overrides: [
       apiClientProvider.overrideWithValue(api),
       if (picker != null) filePickerProvider.overrideWithValue(picker),
-      adminSocketConnectorProvider.overrideWithValue((_) => fake),
+      // Sem [socket], cada reconexão (ex.: ao trocar de tela) ganha um novo.
+      adminSocketConnectorProvider
+          .overrideWithValue((_) => socket ?? FakeAdminSocket()),
     ],
     child: const DashboardApp(),
   );

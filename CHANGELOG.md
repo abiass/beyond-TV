@@ -7,6 +7,25 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [0.8.0] — Fase 8: grupos e agendamento
+
+### Adicionado
+
+- Grupos de TVs, com membros escolhidos em lote e conteúdo padrão. O
+  conteúdo próprio da TV tem prioridade sobre o do grupo.
+- Agendamentos por dia da semana e faixa de horário, para uma TV ou um
+  grupo, com prioridade de 0 a 100. Faixas podem atravessar a meia-noite.
+- A TV resolve a agenda no próprio relógio e troca de conteúdo mesmo com
+  o servidor fora do ar. Os arquivos de todos os horários são baixados
+  com antecedência.
+- Telas de grupos e agenda semanal no painel.
+- Migração 4 do banco (conteúdo do grupo e tabela `schedules`).
+
+### Alterado
+
+- O servidor só manda `content.sync` para as TVs cujo conteúdo mudou de
+  fato.
+
 ## [0.7.0] — Fase 7: biblioteca de mídia e playlists
 
 ### Adicionado

@@ -48,7 +48,7 @@ class PlayerPage extends StatefulWidget {
 class _PlayerPageState extends State<PlayerPage> {
   late final PlaylistRotation _rotation;
   late final _RestartController _restart;
-  String? _revision;
+  int? _version;
   Timer? _tick;
   bool _left = false;
   bool _immersive = false;
@@ -75,7 +75,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _connection.start();
   }
 
-  bool get _playing => !_content.manifest.isEmpty;
+  bool get _playing => _content.activeItems.isNotEmpty;
 
   void _onRotation() {
     _content.reportShown(_rotation.current?.item);
@@ -90,10 +90,9 @@ class _PlayerPageState extends State<PlayerPage> {
         if (mounted) widget.onUnauthorized(context);
       });
     }
-    final manifest = _content.manifest;
-    if (manifest.revision != _revision) {
-      _revision = manifest.revision;
-      _rotation.setItems(manifest.items);
+    if (_content.activeVersion != _version) {
+      _version = _content.activeVersion;
+      _rotation.setItems(_content.activeItems);
     } else {
       _rotation.readinessChanged();
     }

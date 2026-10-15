@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:http/http.dart' as http;
 
+import 'groups.dart';
 import 'media.dart';
 import 'playlists.dart';
+import 'schedules.dart';
 
 /// Erro devolvido pela API (ou falha de rede), com mensagem pronta para
 /// exibir.
@@ -241,6 +243,105 @@ class ApiClient {
         ),
       );
 
+  /// Grupos de TVs, por nome.
+  Future<List<Group>> listGroups() async {
+    final json = await _send('GET', '/api/v1/groups');
+    final groups = json['groups'];
+    if (groups is! List) return const [];
+    return [
+      for (final item in groups)
+        if (item is Map<String, Object?>) Group.fromJson(item),
+    ];
+  }
+
+  Future<Group> createGroup(String name) async => Group.fromJson(
+        await _send('POST', '/api/v1/groups', body: {'name': name}),
+      );
+
+  Future<Group> renameGroup(int id, String name) async => Group.fromJson(
+        await _send('PATCH', '/api/v1/groups/$id', body: {'name': name}),
+      );
+
+  /// Apaga o grupo: as TVs ficam sem grupo e os agendamentos dele somem.
+  Future<void> deleteGroup(int id) => _send('DELETE', '/api/v1/groups/$id');
+
+  /// Define os membros do grupo (as TVs fora da lista saem).
+  Future<Group> setGroupMembers(int id, List<String> deviceIds) async =>
+      Group.fromJson(
+        await _send(
+          'PUT',
+          '/api/v1/groups/$id/devices',
+          body: {'deviceIds': deviceIds},
+        ),
+      );
+
+  /// Conteúdo padrão do grupo: informe um entre [mediaId], [playlistId] e
+  /// [url] (com [name] opcional); sem nenhum, limpa.
+  Future<Group> setGroupContent(
+    int id, {
+    String? mediaId,
+    String? playlistId,
+    String? url,
+    String? name,
+  }) async =>
+      Group.fromJson(
+        await _send(
+          'PUT',
+          '/api/v1/groups/$id/content',
+          body: playlistId != null
+              ? {'playlistId': playlistId}
+              : url != null
+                  ? {'url': url, if (name != null) 'name': name}
+                  : {'mediaId': mediaId},
+        ),
+      );
+
+  /// Põe a TV [deviceId] no grupo [groupId]; `null` tira do grupo.
+  Future<DeviceSummary> setDeviceGroup(String deviceId, int? groupId) async =>
+      DeviceSummary.fromJson(
+        await _send(
+          'PATCH',
+          '/api/v1/devices/$deviceId',
+          body: {'groupId': groupId},
+        ),
+      );
+
+  /// Agendamentos, opcionalmente só os de uma TV ou de um grupo.
+  Future<List<Schedule>> listSchedules({String? deviceId, int? groupId}) async {
+    final query = {
+      if (deviceId != null) 'deviceId': deviceId,
+      if (groupId != null) 'groupId': '$groupId',
+    };
+    final path = Uri(
+      path: '/api/v1/schedules',
+      queryParameters: query.isEmpty ? null : query,
+    ).toString();
+    final json = await _send('GET', path);
+    final schedules = json['schedules'];
+    if (schedules is! List) return const [];
+    return [
+      for (final item in schedules)
+        if (item is Map<String, Object?>) Schedule.fromJson(item),
+    ];
+  }
+
+  Future<Schedule> createSchedule(Schedule schedule) async => Schedule.fromJson(
+        await _send('POST', '/api/v1/schedules', body: schedule.toJson()),
+      );
+
+  /// Atualiza o agendamento [id] com todos os campos de [schedule].
+  Future<Schedule> updateSchedule(String id, Schedule schedule) async =>
+      Schedule.fromJson(
+        await _send(
+          'PATCH',
+          '/api/v1/schedules/$id',
+          body: schedule.toJson(),
+        ),
+      );
+
+  Future<void> deleteSchedule(String id) =>
+      _send('DELETE', '/api/v1/schedules/$id');
+
   /// Envia um dos `DeviceCommands` para a TV [id] (o servidor responde 202).
   Future<void> sendCommand(String id, String type) =>
       _send('POST', '/api/v1/devices/$id/commands', body: {'type': type});
@@ -286,7 +387,11 @@ class ApiClient {
       final error = json['error'];
       throw switch (error) {
         {'code': final String code, 'message': final String message} =>
-          ApiException(message, code: code, status: response.statusCode),
+          ApiException(
+            _knownErrors[code] ?? message,
+            code: code,
+            status: response.statusCode,
+          ),
         _ => ApiException(
             'Erro inesperado do servidor (${response.statusCode}).',
             status: response.statusCode,
@@ -295,6 +400,15 @@ class ApiClient {
     }
     return json;
   }
+
+  /// Mensagens fixas em português para erros de grupos e agenda.
+  static const _knownErrors = {
+    'name_taken': 'Esse nome já está em uso.',
+    'invalid_days': 'Escolha ao menos um dia da semana.',
+    'invalid_time': 'Horário inválido. Use HH:MM, de 00:00 a 23:59.',
+    'invalid_priority': 'A prioridade deve ser um número de 0 a 100.',
+    'unknown_playlist': 'A playlist não existe mais.',
+  };
 
   static Map<String, Object?> _decode(String body) {
     if (body.isEmpty) return const {};

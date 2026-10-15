@@ -97,6 +97,8 @@ void main() {
   late MemoryManifestStore manifests;
   late FakePlayerLog log;
 
+  var clockNow = DateTime(2026, 10, 14, 7, 0);
+
   Future<void> open(WidgetTester tester) async {
     useTvScreen(tester);
     connector = FakeConnector();
@@ -123,6 +125,7 @@ void main() {
         backoffFactory: () => Backoff(initial: const Duration(hours: 1)),
         manifestStore: manifests,
         webPlayer: fakeWebPlayer(log),
+        now: () => clockNow,
       ),
     );
     await tester.pump();
@@ -403,5 +406,67 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 1));
     await close(tester);
+  });
+
+  group('agenda', () {
+    ContentItem site(String id) => ContentItem(
+          mediaId: id,
+          kind: MediaKinds.url,
+          name: id,
+          url: 'https://example.local/$id',
+        );
+
+    Envelope syncAgenda({List<ContentItem> padrao = const []}) =>
+        Envelope.create(
+          MessageTypes.contentSync,
+          payload: ContentManifest(
+            items: padrao,
+            schedules: [
+              ScheduleRule(
+                id: 'r1',
+                days: {1, 2, 3, 4, 5, 6, 7},
+                startMinute: 8 * 60,
+                endMinute: 9 * 60,
+                priority: 0,
+                target: ScheduleTargets.device,
+                items: [site('faixa')],
+              ),
+            ],
+          ).toJson(),
+        );
+
+    setUp(() => clockNow = DateTime(2026, 10, 14, 7, 0));
+
+    testWidgets('na faixa mostra o item da regra e depois volta ao padrão', (
+      tester,
+    ) async {
+      clockNow = DateTime(2026, 10, 14, 8, 30);
+      await open(tester);
+      await deliver(tester, syncAgenda(padrao: [site('padrao')]));
+      expect(find.text('WEB:https://example.local/faixa'), findsOneWidget);
+
+      // Sai da faixa: o relógio avança e o timer de minuto reavalia.
+      clockNow = DateTime(2026, 10, 14, 9, 0, 1);
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('WEB:https://example.local/padrao'), findsOneWidget);
+      expect(find.text('WEB:https://example.local/faixa'), findsNothing);
+      await close(tester);
+    });
+
+    testWidgets('fora da faixa e sem padrão mostra "Aguardando conteúdo"', (
+      tester,
+    ) async {
+      await open(tester);
+      await deliver(tester, syncAgenda());
+      expect(find.textContaining('Aguardando conteúdo'), findsOneWidget);
+
+      clockNow = DateTime(2026, 10, 14, 8, 30);
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('WEB:https://example.local/faixa'), findsOneWidget);
+      expect(find.textContaining('Aguardando conteúdo'), findsNothing);
+      await close(tester);
+    });
   });
 }

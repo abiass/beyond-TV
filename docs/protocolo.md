@@ -401,6 +401,103 @@ Imagem e vídeo levam `sha256` e não levam `url`; o arquivo é baixado de
   `video_player`, mudo e sem controles.
 - `currentItem` passa a ser o nome do item exibido (ou a URL, para sites).
 
+## Grupos e agenda (fase 8)
+
+### O que a TV exibe
+
+1. O **agendamento ativo** de maior precedência, se houver.
+2. Senão, o **conteúdo padrão da TV** (mídia avulsa ou playlist, fases 6 e 7).
+3. Senão, o **conteúdo padrão do grupo** da TV.
+4. Senão, "Aguardando conteúdo".
+
+A TV resolve a agenda sozinha, no **relógio local dela**, e por isso continua
+trocando de conteúdo com o servidor fora do ar. O servidor não converte fuso
+horário.
+
+### Grupos
+
+| Método | Rota | Auth | Corpo | Resposta |
+|--------|------|------|-------|----------|
+| GET | `/groups` | admin | — | `200 { "groups": [Group…] }`, por nome. |
+| POST | `/groups` | admin | `{ "name" }` | `201 Group`. Nome repetido (sem diferenciar maiúsculas) → `409 name_taken`. |
+| PATCH | `/groups/:id` | admin | `{ "name" }` | `200 Group`. |
+| DELETE | `/groups/:id` | admin | — | `204`. As TVs ficam sem grupo; os agendamentos do grupo são apagados. |
+| PUT | `/groups/:id/devices` | admin | `{ "deviceIds": ["…"] }` | `200 Group`. Define os membros: as TVs da lista entram (saindo do grupo anterior) e as que não estão saem. Id desconhecido → `400 unknown_device`. |
+| PUT | `/groups/:id/content` | admin | igual a `PUT /devices/:id/content` | `200 Group`. Conteúdo padrão do grupo. |
+
+`PATCH /devices/:id` aceita também `{ "groupId": 3 }` ou `{ "groupId": null }`
+(grupo inexistente → `400 unknown_group`).
+
+```json
+// Group
+{ "id": 3, "name": "Recepção", "deviceIds": ["…"], "content": null,
+  "playlist": { "id": "…", "name": "Manhã" }, "createdAt": "…" }
+```
+
+Nome de grupo: 1 a 64 caracteres depois do trim. `content` e `playlist`
+seguem a mesma regra do `DeviceSummary`.
+
+### Agendamentos
+
+| Método | Rota | Auth | Corpo | Resposta |
+|--------|------|------|-------|----------|
+| GET | `/schedules?deviceId=…` ou `?groupId=…` | admin | — | `200 { "schedules": [Schedule…] }`. Sem filtro, todos. |
+| POST | `/schedules` | admin | Schedule sem `id` e `createdAt` | `201 Schedule`. |
+| GET | `/schedules/:id` | admin | — | `200 Schedule`. |
+| PATCH | `/schedules/:id` | admin | qualquer campo do POST | `200 Schedule`. |
+| DELETE | `/schedules/:id` | admin | — | `204`. |
+
+```json
+// Schedule
+{ "id": "…", "name": "Almoço", "playlistId": "…", "deviceId": null, "groupId": 3,
+  "days": [1, 2, 3, 4, 5], "start": "11:00", "end": "14:00", "priority": 10,
+  "createdAt": "…" }
+```
+
+- Exatamente um entre `deviceId` e `groupId` (senão `400 bad_request`); alvo
+  inexistente → `400 unknown_device` / `unknown_group`.
+- `playlistId` inexistente → `400 unknown_playlist`. Apagar a playlist, a TV
+  ou o grupo apaga os agendamentos ligados a eles.
+- `days`: dias da semana ISO, 1 = segunda até 7 = domingo, sem repetição,
+  pelo menos um (`400 invalid_days`).
+- `start` e `end`: `"HH:MM"` de `00:00` a `23:59` (`parseClockTime`;
+  `400 invalid_time`). O início vale, o fim não. Se `end` não é maior que
+  `start`, a faixa vira a noite e termina no dia seguinte; `end == start`
+  cobre 24 horas. `days` diz em que dia a faixa **começa**.
+- `priority`: inteiro de 0 a 100 (`400 invalid_priority`).
+- `name`: 1 a 64 caracteres depois do trim.
+
+**Precedência**, quando mais de um agendamento está ativo: maior `priority`;
+no empate, o da TV vence o do grupo; depois, o criado por último.
+
+### Manifesto
+
+`content.sync` ganha `schedules`, uma lista de `ScheduleRule` já na ordem de
+precedência. `items` continua sendo o conteúdo padrão (da TV ou do grupo).
+Sem agendamentos, a chave não aparece e o `revision` é o mesmo da fase 7.
+
+```json
+{ "revision": "…", "items": [ContentItem…],
+  "schedules": [{ "id": "…", "days": [1,2,3,4,5], "start": "11:00", "end": "14:00",
+                  "priority": 10, "target": "group", "items": [ContentItem…] }] }
+```
+
+A resolução fica no pacote `beyond_protocol` (`ScheduleResolution`):
+`itemsAt(now)`, `activeScheduleAt(now)`, `nextChangeAfter(now)` e
+`allItems`. Um agendamento com playlist vazia deixa a TV em "Aguardando
+conteúdo" durante a faixa.
+
+O servidor recalcula o manifesto das TVs online sempre que algo que pode
+afetá-lo muda (conteúdo, grupo, agendamento, playlist ou mídia) e só manda
+`content.sync` para as que tiveram o `revision` alterado.
+
+### Na TV
+
+- Baixa os arquivos de `allItems`, para trocar de faixa mesmo offline.
+- Recalcula o que exibe em `nextChangeAfter(now)` e, por segurança, a cada
+  minuto (o relógio pode ser ajustado). Ao mudar o conjunto de itens, a
+  rotação recomeça do primeiro.
+
 ## Saúde
 
 `GET /health` (sem auth) responde

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'json_fields.dart';
 import 'media_files.dart';
 import 'playlists.dart';
+import 'schedules.dart';
 
 /// Tipos de mídia (`media.kind`).
 abstract final class MediaKinds {
@@ -80,15 +81,23 @@ final class ContentItem {
 /// Payload do `content.sync`: tudo o que a TV deve exibir agora.
 ///
 /// A TV guarda o último manifesto em disco e continua exibindo se o
-/// servidor cair. [revision] muda sempre que [items] muda.
+/// servidor cair. [revision] muda sempre que [items] ou [schedules] mudam.
 final class ContentManifest {
-  ContentManifest({required this.items}) : revision = _revisionOf(items);
+  ContentManifest({
+    required this.items,
+    this.schedules = const [],
+  }) : revision = _revisionOf(items, schedules);
 
   factory ContentManifest.fromJson(Map<String, Object?> json) {
     final manifest = ContentManifest(
       items: [
         for (final item in json.field<List<Object?>>('items'))
           if (item is Map<String, Object?>) ContentItem.fromJson(item),
+      ],
+      schedules: [
+        for (final rule
+            in json.optionalField<List<Object?>>('schedules') ?? const [])
+          if (rule is Map<String, Object?>) ScheduleRule.fromJson(rule),
       ],
     );
     return manifest;
@@ -97,25 +106,43 @@ final class ContentManifest {
   /// Manifesto vazio: a TV mostra a tela "Aguardando conteúdo".
   static final empty = ContentManifest(items: const []);
 
+  /// Conteúdo padrão, exibido quando nenhum agendamento está ativo.
   final List<ContentItem> items;
 
-  /// Identifica o conteúdo, calculado a partir de [items].
+  /// Agendamentos, já na ordem de precedência (veja `ScheduleResolution`).
+  final List<ScheduleRule> schedules;
+
+  /// Identifica o conteúdo, calculado a partir de [items] e [schedules].
   final String revision;
 
-  bool get isEmpty => items.isEmpty;
+  /// Sem nada para exibir, em nenhum horário.
+  bool get isEmpty =>
+      items.isEmpty && schedules.every((rule) => rule.items.isEmpty);
 
   Map<String, Object?> toJson() => {
         'revision': revision,
         'items': [for (final item in items) item.toJson()],
+        if (schedules.isNotEmpty)
+          'schedules': [for (final rule in schedules) rule.toJson()],
       };
 
-  static String _revisionOf(List<ContentItem> items) {
-    // FNV-1a de 32 bits do JSON dos itens: basta para detectar mudança.
+  static String _revisionOf(
+    List<ContentItem> items,
+    List<ScheduleRule> schedules,
+  ) {
+    // FNV-1a de 32 bits do JSON: basta para detectar mudança. Sem agenda, o
+    // valor é o mesmo da fase 6.
+    final itemsJson = [for (final item in items) item.toJson()];
     var hash = 0x811c9dc5;
     for (final byte in utf8.encode(
-      jsonEncode([
-        for (final item in items) item.toJson(),
-      ]),
+      jsonEncode(
+        schedules.isEmpty
+            ? itemsJson
+            : {
+                'items': itemsJson,
+                'schedules': [for (final rule in schedules) rule.toJson()],
+              },
+      ),
     )) {
       hash = ((hash ^ byte) * 0x01000193) & 0xffffffff;
     }
