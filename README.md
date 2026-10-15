@@ -3,8 +3,34 @@
 Sistema de *digital signage* **auto-hospedado** para redes locais. Com ele você
 controla várias TVs Android a partir de um painel web que roda no seu próprio PC.
 
-> 🚧 **Em desenvolvimento.** Acompanhe o progresso em
-> [docs/PLANO_DE_DESENVOLVIMENTO.md](docs/PLANO_DE_DESENVOLVIMENTO.md).
+![Lista de TVs no dashboard](docs/img/dashboard-tvs.png)
+
+## Guia rápido
+
+Você precisa de um PC com Windows e de TVs (ou TV boxes) Android 7 ou mais
+novo, todos na mesma rede.
+
+1. Baixe em [Releases](https://github.com/abiass/beyond-TV/releases/latest)
+   o `beyond-tv-server-…-windows-x64.zip` e o `beyond-tv-….apk`.
+2. **No PC:** descompacte o zip e dê dois cliques em
+   `Iniciar Beyond TV.bat`. Quando o Windows perguntar sobre o firewall,
+   permita o acesso em redes **privadas**.
+3. Abra `http://localhost:8787` no navegador e crie o administrador.
+4. **Na TV:** instale o APK por pen drive ou `adb`
+   ([passo a passo](docs/instalacao-tv.md)) e abra o app.
+5. No painel, clique em **Adicionar TV** e digite na TV o código que
+   aparecer. A TV acha o servidor sozinha; se não achar, use **Digitar IP**
+   com o IP do PC.
+6. Cadastre sites, imagens e vídeos em **Mídia**, monte playlists e escolha
+   o que cada TV (ou grupo de TVs) exibe. Em **Agenda** você troca o
+   conteúdo por dia e horário.
+
+Os dados ficam na pasta `data`, ao lado do `.bat`. Para atualizar o servidor,
+troque os outros arquivos e mantenha essa pasta.
+
+| Mídia | Playlist | Agenda |
+|-------|----------|--------|
+| ![Biblioteca de mídia](docs/img/dashboard-midia.png) | ![Editor de playlist](docs/img/dashboard-playlist.png) | ![Agenda semanal de um grupo](docs/img/dashboard-agenda.png) |
 
 ## Como funciona
 
@@ -67,6 +93,17 @@ roda a partir da raiz do repositório. Use
 Detalhes do fluxo em [docs/protocolo.md](docs/protocolo.md). Para instalar numa
 TV de verdade (adb, pen drive, abrir ao ligar e modo quiosque), veja
 [docs/instalacao-tv.md](docs/instalacao-tv.md).
+
+### Gerando a release
+
+| O quê | Comando | Resultado |
+|-------|---------|-----------|
+| Servidor para Windows | `powershell -ExecutionPolicy Bypass -File tool\build-server-windows.ps1` | `dist\beyond-tv-server-<versão>-windows-x64.zip` |
+| APK assinado | `cd apps/tv && flutter build apk --release` | `apps/tv/build/app/outputs/flutter-apk/app-release.apk` |
+
+O APK de release precisa do `apps/tv/android/key.properties` (veja a seção
+de assinatura em [docs/instalacao-tv.md](docs/instalacao-tv.md)). Guarde a
+keystore com cuidado: sem ela, as próximas versões não instalam por cima.
 
 ### Problemas conhecidos no Windows
 
