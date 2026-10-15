@@ -14,9 +14,16 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   ao vivo, com o modelo, o IP e o código, e os botões Aprovar e Recusar.
   Ninguém precisa digitar nada no controle remoto. O código digitado
   continua disponível em *Digitar código* e é usado com servidores 1.0.
+- Controle remoto pelo painel: no detalhe da TV, *Controlar* mostra a tela
+  da TV ao vivo. Clicar na imagem toca no site, o teclado do PC digita
+  (Ctrl+V cola) e a roda do mouse rola. Serve para fazer login num sistema
+  e deixá-lo rodando. A abertura do controle fica na auditoria; o que é
+  digitado não fica em lugar nenhum.
 
 ### Corrigido
 
+- A captura de tela da TV saía preta: o app é desenhado numa camada que a
+  cópia da janela não pegava. Agora a captura copia essa camada.
 - Teclado de pareamento da TV: descendo pelas fileiras, o foco do controle
   saía do teclado e ficava preso sem nenhuma seta para voltar. Também
   voltava a ficar sem foco depois de um código errado.
