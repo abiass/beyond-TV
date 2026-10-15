@@ -119,7 +119,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Conexão: Conectada'), findsOneWidget);
-    expect(find.textContaining('Versão do app: 0.1.0'), findsOneWidget);
+    expect(find.textContaining('Versão do app: 1.0.0'), findsOneWidget);
     expect(find.textContaining('Revisão do manifesto: '), findsOneWidget);
     expect(find.textContaining('Cache: 1 arquivo · 2,0 KB'), findsOneWidget);
     expect(find.textContaining('linha de teste do log'), findsOneWidget);

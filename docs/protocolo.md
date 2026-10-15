@@ -570,4 +570,4 @@ além das 10 000 mais recentes são apagadas.
 ## Saúde
 
 `GET /health` (sem auth) responde
-`{ "status": "ok", "version": "0.1.0", "protocol": 1 }`.
+`{ "status": "ok", "version": "1.0.0", "protocol": 1 }`.

@@ -7,6 +7,26 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [1.0.0] — 2026-10-15 — Fase 11: release 1.0
+
+Primeira versão estável. Reúne tudo das fases 1 a 10: pareamento por
+código, sites, imagens, vídeos, playlists, grupos, agenda semanal, preview
+da tela das TVs, log de auditoria e robustez no Android TV.
+
+### Adicionado
+
+- Pacote do servidor para Windows (`tool/build-server-windows.ps1`): zip
+  com o executável, o dashboard já compilado e um `.bat` para iniciar. O
+  dashboard não depende de CDN e abre em redes sem internet.
+- APK de release assinado, publicado no GitHub Releases com o pacote do
+  servidor.
+- Guia rápido e prints do dashboard no README.
+
+### Alterado
+
+- Versão 1.0.0 no servidor (`/health`), no app da TV, no dashboard e no
+  `beyond_protocol`. O protocolo continua na versão 1.
+
 ## [0.10.0] — Fase 10: robustez no Android TV
 
 ### Adicionado

@@ -591,12 +591,12 @@ verde.
 | 10.4 | `docs: adiciona guia de instalação na TV (adb e pen drive)` | ✅ |
 | 10.5 | `perf(tv): otimiza memória do WebView e vídeos em TVs de baixo custo` | ✅ |
 
-### Fase 11 — Release 1.0 ⬜
-| # | Commit |
-|---|--------|
-| 11.1 | `build(server): adiciona script de build do executável Windows` |
-| 11.2 | `docs: revisa README com prints e guia rápido` |
-| 11.3 | `chore: prepara release 1.0.0` |
+### Fase 11 — Release 1.0 ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 11.1 | `build(server): adiciona script de build do executável Windows` | ✅ |
+| 11.2 | `docs: revisa README com prints e guia rápido` | ✅ |
+| 11.3 | `chore: prepara release 1.0.0` | ✅ |
 
 **Marco → tag `v1.0.0`, APK assinado e executável do servidor publicados no
 GitHub Releases.**
