@@ -10,6 +10,7 @@ import 'api/auth_api.dart';
 import 'api/devices_api.dart';
 import 'api/groups_api.dart';
 import 'api/media_api.dart';
+import 'api/pair_requests_api.dart';
 import 'api/pairing_api.dart';
 import 'api/playlists_api.dart';
 import 'api/schedules_api.dart';
@@ -27,6 +28,7 @@ import 'http/rate_limit.dart';
 import 'http/static_site.dart';
 import 'media/media_files.dart';
 import 'media/media_store.dart';
+import 'pairing/pair_requests.dart';
 import 'pairing/pairing_codes.dart';
 import 'playlists/playlist_store.dart';
 import 'realtime/admin_socket.dart';
@@ -113,6 +115,17 @@ Handler buildHandler({
     hub: hub,
     pairLimiter: RateLimiter(
       maxAttempts: PairingApi.maxPairAttempts,
+      window: const Duration(minutes: 1),
+      clock: clock,
+    ),
+  ).addRoutes(router);
+  PairRequestsApi(
+    sessions: sessions,
+    requests: PairRequestStore(clock: clock),
+    devices: devices,
+    hub: hub,
+    createLimiter: RateLimiter(
+      maxAttempts: PairRequestsApi.maxCreateAttempts,
       window: const Duration(minutes: 1),
       clock: clock,
     ),

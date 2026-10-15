@@ -21,4 +21,11 @@ abstract final class MessageTypes {
   static const deviceState = 'device.state';
   static const deviceRemoved = 'device.removed';
   static const deviceScreenshot = 'device.screenshot';
+
+  /// Uma TV pediu para ser aprovada. Payload: `PendingPairRequest`.
+  static const pairRequestCreated = 'pair_request.created';
+
+  /// O pedido saiu da lista (aprovado, recusado, vencido ou cancelado).
+  /// Payload: `{ "id" }`.
+  static const pairRequestClosed = 'pair_request.closed';
 }
