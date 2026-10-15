@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:beyond_tv/src/app.dart';
+import 'package:beyond_tv/src/widgets/tv_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -106,6 +107,91 @@ void main() {
 
     // Grade de 6 colunas: à direita do "2" fica o "3"; abaixo do "3", o "9".
     expect(slots(tester), '39');
+  });
+
+  Future<void> press(
+    WidgetTester tester,
+    LogicalKeyboardKey key, [
+    int n = 1,
+  ]) async {
+    for (var i = 0; i < n; i++) {
+      await tester.sendKeyEvent(key);
+    }
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('o D-pad não sai do teclado por cima nem por baixo', (
+    tester,
+  ) async {
+    await openPairing(tester);
+
+    // Descer além da última fileira e subir além da primeira não tira o
+    // foco do teclado (antes ele ia para "Trocar servidor" e se perdia).
+    await press(tester, LogicalKeyboardKey.arrowDown, 8);
+    await press(tester, LogicalKeyboardKey.select);
+    await press(tester, LogicalKeyboardKey.arrowUp, 8);
+    await press(tester, LogicalKeyboardKey.select);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    await press(tester, LogicalKeyboardKey.arrowDown, 8);
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    await press(tester, LogicalKeyboardKey.select);
+
+    // Coluna 1: para no "Z" e volta ao "2". Coluna 2: para no Apagar e,
+    // uma acima, aperta o "U".
+    expect(slots(tester), 'Z2U');
+  });
+
+  testWidgets('última fileira incompleta: descer leva à tecla mais próxima', (
+    tester,
+  ) async {
+    await openPairing(tester);
+
+    // Coluna 6 ("7", "D", "K", "S", "Y"): abaixo do "Y" não há tecla; o
+    // foco vai para o OK, que envia e reclama do código incompleto.
+    await press(tester, LogicalKeyboardKey.arrowRight, 5);
+    await press(tester, LogicalKeyboardKey.arrowDown, 4);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(slots(tester), 'Y');
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(find.text('Digite os 6 caracteres.'), findsOneWidget);
+  });
+
+  testWidgets('à esquerda vai para "Trocar servidor" e à direita volta', (
+    tester,
+  ) async {
+    await openPairing(tester);
+
+    await press(tester, LogicalKeyboardKey.arrowDown, 5); // "Z"
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<TvButton>()
+          ?.label,
+      'Trocar servidor',
+    );
+
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(slots(tester).length, 1);
+  });
+
+  testWidgets('depois de um código errado o foco volta ao teclado', (
+    tester,
+  ) async {
+    await openPairing(
+      tester,
+      response: apiError(400, 'invalid_code', 'Código inválido.'),
+    );
+
+    // Digita "222222" pelo D-pad: o envio desabilita as teclas.
+    await press(tester, LogicalKeyboardKey.select, 6);
+    expect(find.text('Código inválido.'), findsOneWidget);
+
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(slots(tester), '3');
   });
 
   testWidgets('envia sozinho ao completar o código e mostra "pareada"', (
