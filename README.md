@@ -64,7 +64,9 @@ roda a partir da raiz do repositório. Use
    código. No **emulador** a descoberta não alcança o PC: use **Digitar IP**
    com `10.0.2.2` (o endereço do PC visto de dentro do emulador).
 
-Detalhes do fluxo em [docs/protocolo.md](docs/protocolo.md).
+Detalhes do fluxo em [docs/protocolo.md](docs/protocolo.md). Para instalar numa
+TV de verdade (adb, pen drive, abrir ao ligar e modo quiosque), veja
+[docs/instalacao-tv.md](docs/instalacao-tv.md).
 
 ### Problemas conhecidos no Windows
 

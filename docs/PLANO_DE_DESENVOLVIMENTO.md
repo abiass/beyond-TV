@@ -582,14 +582,14 @@ verde.
 | 9.3 | `feat(tv): adiciona menu oculto com informações e desparear` | ✅ |
 | 9.4 | `feat(server): registra log de auditoria de ações do admin` | ✅ |
 
-### Fase 10 — Robustez Android TV ⬜
-| # | Commit |
-|---|--------|
-| 10.1 | `feat(tv): inicia automaticamente após boot` |
-| 10.2 | `feat(tv): adiciona modo quiosque opcional (launcher)` |
-| 10.3 | `build(tv): configura assinatura de release via key.properties (fora do git)` |
-| 10.4 | `docs: adiciona guia de instalação na TV (adb e pen drive)` |
-| 10.5 | `perf(tv): otimiza memória do WebView e vídeos em TVs de baixo custo` |
+### Fase 10 — Robustez Android TV ✅
+| # | Commit | Status |
+|---|--------|--------|
+| 10.1 | `feat(tv): inicia automaticamente após boot` | ✅ |
+| 10.2 | `feat(tv): adiciona modo quiosque opcional (launcher)` | ✅ |
+| 10.3 | `build(tv): configura assinatura de release via key.properties (fora do git)` | ✅ |
+| 10.4 | `docs: adiciona guia de instalação na TV (adb e pen drive)` | ✅ |
+| 10.5 | `perf(tv): otimiza memória do WebView e vídeos em TVs de baixo custo` | ✅ |
 
 ### Fase 11 — Release 1.0 ⬜
 | # | Commit |

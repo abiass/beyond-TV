@@ -23,6 +23,7 @@ import 'server/tv_api.dart';
 import 'theme.dart';
 import 'remote/app_log.dart';
 import 'remote/screen_capturer.dart';
+import 'system/system_settings.dart';
 
 class TvApp extends StatelessWidget {
   TvApp({
@@ -40,6 +41,7 @@ class TvApp extends StatelessWidget {
     this.mediaClient,
     this.now,
     ScreenCapturer? screenCapturer,
+    this.systemSettings = const PlatformSystemSettings(),
   })  : _screenCapturer = screenCapturer,
         discovery = discovery ?? const UdpServerDiscovery(),
         api = api ?? TvApi(),
@@ -56,6 +58,9 @@ class TvApp extends StatelessWidget {
 
   late final ScreenCapturer screenCapturer =
       _screenCapturer ?? PlatformScreenCapturer(boundaryKey: _boundaryKey);
+
+  /// Opções de sistema (abrir ao ligar, quiosque); os testes injetam um falso.
+  final SystemSettings systemSettings;
 
   final ServerDiscovery discovery;
   final TvApi api;
@@ -103,9 +108,12 @@ class TvApp extends StatelessWidget {
       title: 'Beyond TV',
       debugShowCheckedModeBanner: false,
       theme: buildTvTheme(),
-      builder: (context, child) => RepaintBoundary(
-        key: _boundaryKey,
-        child: child ?? const SizedBox.shrink(),
+      builder: (context, child) => SystemSettingsScope(
+        settings: systemSettings,
+        child: RepaintBoundary(
+          key: _boundaryKey,
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
       home: _StartupPage(app: this),
     );

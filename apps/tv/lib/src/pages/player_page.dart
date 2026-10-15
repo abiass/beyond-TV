@@ -53,6 +53,16 @@ class _PlayerPageState extends State<PlayerPage> {
   Timer? _tick;
   bool _left = false;
   bool _immersive = false;
+  int _maxCacheBytes = 0;
+
+  // Teto do cache de imagens decodificadas: TVs baratas têm 1-2 GB de RAM.
+  static const _imageCacheBytes = 64 << 20;
+
+  // Troca de item com vídeo ou site de permeio é corte seco (sem fade):
+  // assim nunca há dois decodificadores nem duas WebViews vivos. Cada corte
+  // muda [_epoch], que recria o AnimatedSwitcher e descarta o item antigo.
+  int _epoch = 0;
+  RotationEntry? _shown;
 
   DeviceConnection get _connection => widget.connection;
   ContentController get _content => widget.content;
@@ -60,6 +70,9 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void initState() {
     super.initState();
+    final imageCache = PaintingBinding.instance.imageCache;
+    _maxCacheBytes = imageCache.maximumSizeBytes;
+    imageCache.maximumSizeBytes = _imageCacheBytes;
     unawaited(widget.setWakelock(true));
     _rotation = PlaylistRotation(isReady: _content.isReady)
       ..addListener(_onRotation);
@@ -100,6 +113,20 @@ class _PlayerPageState extends State<PlayerPage> {
     setState(() {});
   }
 
+  void _trackEpoch(RotationEntry? current) {
+    final previous = _shown;
+    if (previous?.key == current?.key) return;
+    _shown = current;
+    if (previous == null || current == null) return;
+    // Site -> site fica de fora: a mesma WebView segue com a nova URL.
+    final bothSites = previous.item.kind == MediaKinds.url &&
+        current.item.kind == MediaKinds.url;
+    if (!bothSites && (_isHeavy(previous) || _isHeavy(current))) _epoch++;
+  }
+
+  bool _isHeavy(RotationEntry e) =>
+      e.item.kind == MediaKinds.video || e.item.kind == MediaKinds.url;
+
   void _syncSystemUi() {
     if (_playing == _immersive) return;
     _immersive = _playing;
@@ -122,6 +149,7 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     _content.dispose();
     unawaited(_connection.dispose());
+    PaintingBinding.instance.imageCache.maximumSizeBytes = _maxCacheBytes;
     super.dispose();
   }
 
@@ -129,33 +157,41 @@ class _PlayerPageState extends State<PlayerPage> {
   Widget build(BuildContext context) {
     final current = _rotation.current;
     _syncSystemUi();
+    _trackEpoch(current);
 
     final Widget body;
     if (!_playing) {
       _content.player = null;
       body = PairedPage(connection: _connection);
     } else {
-      body = Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 600),
-              child: current == null
-                  ? const _DownloadingView(key: ValueKey('downloading'))
-                  : KeyedSubtree(
-                      key: ValueKey(current.key),
-                      child: _itemView(context, current),
-                    ),
-            ),
-            if (_connection.status == ConnectionStatus.offline)
-              const Positioned(
-                top: 16,
-                right: 16,
-                child: Icon(Icons.circle, size: 12, color: Colors.orange),
+      body = RepaintBoundary(
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              AnimatedSwitcher(
+                key: ValueKey(_epoch),
+                duration: const Duration(milliseconds: 600),
+                child: current == null
+                    ? const _DownloadingView(key: ValueKey('downloading'))
+                    : KeyedSubtree(
+                        // Sites seguidos compartilham a chave: a mesma WebView
+                        // recebe a nova URL em vez de criar outra.
+                        key: current.item.kind == MediaKinds.url
+                            ? const ValueKey('web')
+                            : ValueKey(current.key),
+                        child: _itemView(context, current),
+                      ),
               ),
-          ],
+              if (_connection.status == ConnectionStatus.offline)
+                const Positioned(
+                  top: 16,
+                  right: 16,
+                  child: Icon(Icons.circle, size: 12, color: Colors.orange),
+                ),
+            ],
+          ),
         ),
       );
     }

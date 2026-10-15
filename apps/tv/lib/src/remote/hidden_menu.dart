@@ -7,6 +7,7 @@ import '../content/content_controller.dart';
 import '../device/device_info_source.dart';
 import '../media/media_cache.dart';
 import '../realtime/device_connection.dart';
+import '../system/system_settings.dart';
 import '../theme.dart';
 import '../widgets/tv_button.dart';
 import 'app_log.dart';
@@ -42,6 +43,11 @@ class _HiddenMenuHostState extends State<HiddenMenuHost> {
   /// repeat da tecla não apertar um botão do menu.
   bool _awaitRelease = false;
 
+  /// Estado do sistema; só o modo quiosque ativo precisa dele aqui.
+  final ValueNotifier<SystemStatus> _system =
+      ValueNotifier(SystemStatus.unavailable);
+  SystemSettings? _settings;
+
   @override
   void initState() {
     super.initState();
@@ -49,9 +55,24 @@ class _HiddenMenuHostState extends State<HiddenMenuHost> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _settings = SystemSettingsScope.of(context);
+    unawaited(_refreshSystem());
+  }
+
+  Future<void> _refreshSystem() async {
+    final settings = _settings;
+    if (settings == null) return;
+    final status = await settings.getStatus();
+    if (mounted) _system.value = status;
+  }
+
+  @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
     _trigger.dispose();
+    _system.dispose();
     super.dispose();
   }
 
@@ -68,6 +89,7 @@ class _HiddenMenuHostState extends State<HiddenMenuHost> {
 
   void _open({required bool byHold}) {
     if (_visible || !mounted) return;
+    unawaited(_refreshSystem());
     setState(() {
       _visible = true;
       _awaitRelease = byHold;
@@ -76,17 +98,23 @@ class _HiddenMenuHostState extends State<HiddenMenuHost> {
 
   void _close() {
     if (!_visible) return;
+    unawaited(_refreshSystem());
     _trigger.reset();
     setState(() => _visible = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_visible,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _close();
-      },
+    // Em modo quiosque o Voltar não sai do app; o menu ainda fecha com ele.
+    return ValueListenableBuilder<SystemStatus>(
+      valueListenable: _system,
+      builder: (context, system, child) => PopScope(
+        canPop: !_visible && !system.kioskActive,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _close();
+        },
+        child: child!,
+      ),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -97,6 +125,7 @@ class _HiddenMenuHostState extends State<HiddenMenuHost> {
                 content: widget.content,
                 connection: widget.connection,
                 log: widget.log ?? AppLog.instance,
+                status: _system,
                 canActivate: () => !_awaitRelease,
                 onClose: _close,
               ),
@@ -116,6 +145,7 @@ class HiddenMenu extends StatefulWidget {
     required this.connection,
     required this.log,
     required this.onClose,
+    this.status,
     this.canActivate = _always,
   });
 
@@ -123,6 +153,9 @@ class HiddenMenu extends StatefulWidget {
   final DeviceConnection connection;
   final AppLog log;
   final VoidCallback onClose;
+
+  /// Estado do sistema, compartilhado com o host; sem ele o menu cria o seu.
+  final ValueNotifier<SystemStatus>? status;
 
   /// `false` enquanto o OK que abriu o menu ainda está apertado.
   final bool Function() canActivate;
@@ -137,6 +170,58 @@ class _HiddenMenuState extends State<HiddenMenu> {
   final _logScroll = ScrollController();
   CacheStats? _stats;
   bool _busy = false;
+  late final ValueNotifier<SystemStatus> _system =
+      widget.status ?? (_ownSystem = ValueNotifier(SystemStatus.unavailable));
+  ValueNotifier<SystemStatus>? _ownSystem;
+  late SystemSettings _settings;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _settings = SystemSettingsScope.of(context);
+    if (_ownSystem != null) unawaited(_refreshSystem());
+  }
+
+  Future<void> _refreshSystem() async {
+    final status = await _settings.getStatus();
+    if (mounted) _system.value = status;
+  }
+
+  Future<void> _toggleBoot() async {
+    if (_busy || !widget.canActivate()) return;
+    final enabled = !_system.value.startOnBoot;
+    await _settings.setStartOnBoot(enabled);
+    widget.log.add('Abrir ao ligar a TV: ${enabled ? 'sim' : 'não'}');
+    await _refreshSystem();
+  }
+
+  Future<void> _toggleKiosk() async {
+    if (_busy || !widget.canActivate()) return;
+    final enabled = !_system.value.kioskEnabled;
+    await _settings.setKioskEnabled(enabled);
+    widget.log.add('Modo quiosque: ${enabled ? 'ligado' : 'desligado'}');
+    await _refreshSystem();
+  }
+
+  Future<void> _openOverlay() async {
+    if (_busy || !widget.canActivate()) return;
+    final opened = await _settings.openOverlaySettings();
+    widget.log.add(
+      opened
+          ? 'Aberta a tela de sobreposição'
+          : 'Esta TV não tem a tela de sobreposição',
+    );
+  }
+
+  Future<void> _openHome() async {
+    if (_busy || !widget.canActivate()) return;
+    final opened = await _settings.openHomeSettings();
+    widget.log.add(
+      opened
+          ? 'Aberta a escolha do launcher padrão'
+          : 'Esta TV não tem a escolha de launcher',
+    );
+  }
 
   @override
   void initState() {
@@ -149,6 +234,7 @@ class _HiddenMenuState extends State<HiddenMenu> {
   void dispose() {
     widget.content.removeListener(_loadStats);
     _logScroll.dispose();
+    _ownSystem?.dispose();
     super.dispose();
   }
 
@@ -218,66 +304,81 @@ class _HiddenMenuState extends State<HiddenMenu> {
                     widget.connection,
                     widget.content,
                   ]),
-                  builder: (context, _) => Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Menu da TV', style: textTheme.headlineMedium),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TvButton(
-                              label: 'Recarregar',
-                              icon: Icons.refresh,
-                              autofocus: true,
-                              onPressed: _reload,
+                  builder: (context, _) => SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Menu da TV', style: textTheme.headlineMedium),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TvButton(
+                                label: 'Recarregar',
+                                icon: Icons.refresh,
+                                autofocus: true,
+                                onPressed: _reload,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: TvButton(
-                              label: 'Desparear',
-                              icon: Icons.link_off,
-                              onPressed: _unpair,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TvButton(
+                                label: 'Desparear',
+                                icon: Icons.link_off,
+                                onPressed: _unpair,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: TvButton(
-                              label: 'Fechar',
-                              icon: Icons.close,
-                              onPressed: () => _act(widget.onClose),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TvButton(
+                                label: 'Fechar',
+                                icon: Icons.close,
+                                onPressed: () => _act(widget.onClose),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _InfoLine('Versão do app', appVersion),
-                      _InfoLine('Id da TV', credentials.deviceId),
-                      _InfoLine(
-                        'Servidor',
-                        '${server.name ?? 'servidor'} · ${server.hostPort}',
-                      ),
-                      _InfoLine('Conexão', _statusText(widget.connection)),
-                      _InfoLine(
-                        'Item exibido',
-                        widget.content.currentItem ?? 'nenhum',
-                      ),
-                      _InfoLine(
-                        'Revisão do manifesto',
-                        widget.content.manifest.revision,
-                      ),
-                      _InfoLine('Cache', _cacheText(_stats)),
-                      const SizedBox(height: 12),
-                      Text('Log', style: textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      Expanded(
-                        child: _LogView(
-                          log: widget.log,
-                          controller: _logScroll,
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        ValueListenableBuilder<SystemStatus>(
+                          valueListenable: _system,
+                          builder: (context, system, _) => _SystemSection(
+                            status: system,
+                            onToggleBoot: _toggleBoot,
+                            onToggleKiosk: _toggleKiosk,
+                            onOpenOverlay: _openOverlay,
+                            onOpenHome: _openHome,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
+                        _InfoLine('Versão do app', appVersion),
+                        _InfoLine('Id da TV', credentials.deviceId),
+                        _InfoLine(
+                          'Servidor',
+                          '${server.name ?? 'servidor'} · ${server.hostPort}',
+                        ),
+                        _InfoLine('Conexão', _statusText(widget.connection)),
+                        _InfoLine(
+                          'Item exibido',
+                          widget.content.currentItem ?? 'nenhum',
+                        ),
+                        _InfoLine(
+                          'Revisão do manifesto',
+                          widget.content.manifest.revision,
+                        ),
+                        _InfoLine('Cache', _cacheText(_stats)),
+                        const SizedBox(height: 8),
+                        Text('Log', style: textTheme.titleMedium),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          height: 160,
+                          child: _LogView(
+                            log: widget.log,
+                            controller: _logScroll,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -302,6 +403,75 @@ class _HiddenMenuState extends State<HiddenMenu> {
     if (stats == null) return 'indisponível';
     final files = stats.files == 1 ? '1 arquivo' : '${stats.files} arquivos';
     return '$files · ${formatBytes(stats.bytes)}';
+  }
+}
+
+/// Seção "Sistema": abrir ao ligar, sobreposição e modo quiosque.
+class _SystemSection extends StatelessWidget {
+  const _SystemSection({
+    required this.status,
+    required this.onToggleBoot,
+    required this.onToggleKiosk,
+    required this.onOpenOverlay,
+    required this.onOpenHome,
+  });
+
+  final SystemStatus status;
+  final VoidCallback onToggleBoot;
+  final VoidCallback onToggleKiosk;
+  final VoidCallback onOpenOverlay;
+  final VoidCallback onOpenHome;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    if (!status.available) {
+      return Text('Sistema: indisponível', style: textTheme.titleMedium);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Sistema', style: textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          children: [
+            TvButton(
+              label: 'Abrir ao ligar a TV',
+              subtitle: status.startOnBoot ? 'Sim' : 'Não',
+              icon: Icons.power_settings_new,
+              onPressed: onToggleBoot,
+            ),
+            if (status.needsOverlayPermission)
+              TvButton(
+                label: 'Permitir sobreposição',
+                subtitle: 'Sobreposição: não permitida',
+                icon: Icons.layers,
+                onPressed: onOpenOverlay,
+              ),
+            TvButton(
+              label: 'Modo quiosque',
+              subtitle: status.kioskEnabled ? 'Ligado' : 'Desligado',
+              icon: Icons.lock_outline,
+              onPressed: onToggleKiosk,
+            ),
+            if (status.kioskEnabled && !status.isDefaultLauncher)
+              TvButton(
+                label: 'Escolher launcher padrão',
+                icon: Icons.home,
+                onPressed: onOpenHome,
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'No Android 10 ou mais novo, abrir sozinho exige a permissão de '
+          'sobreposição ou o modo quiosque.',
+          style: TextStyle(fontSize: 14, color: Colors.white70),
+        ),
+      ],
+    );
   }
 }
 

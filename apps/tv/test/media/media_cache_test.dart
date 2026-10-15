@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -131,5 +132,36 @@ void main() {
 
     expect(files(), isEmpty);
     expect((await cache.stats()).files, 0);
+  });
+
+  test('grava em streaming: o .part cresce antes do fim do download', () async {
+    final chunk = List<int>.filled(64 * 1024, 7);
+    final chunks = 40;
+    final all = [for (var i = 0; i < chunks; i++) ...chunk];
+    final sha = sha256.convert(all).toString();
+    final body = StreamController<List<int>>();
+    final streaming = MediaCache(
+      root: Directory('${dir.path}/stream'),
+      client: MockClient.streaming((request, _) async {
+        return http.StreamedResponse(body.stream, 200);
+      }),
+    );
+    final future = streaming.ensure(_item(sha: sha), base: _base, token: 't');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    for (var i = 0; i < chunks ~/ 2; i++) {
+      body.add(chunk);
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final part = File('${dir.path}/stream/$sha.part');
+    expect(part.existsSync(), isTrue);
+    expect(part.lengthSync(), greaterThan(0));
+    expect(part.lengthSync(), lessThan(all.length));
+    for (var i = chunks ~/ 2; i < chunks; i++) {
+      body.add(chunk);
+    }
+    await body.close();
+    final file = await future;
+    expect(file.lengthSync(), all.length);
+    expect(part.existsSync(), isFalse);
   });
 }

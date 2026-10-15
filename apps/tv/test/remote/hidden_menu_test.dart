@@ -7,6 +7,7 @@ import 'package:beyond_tv/src/content/manifest_store.dart';
 import 'package:beyond_tv/src/device/credentials.dart';
 import 'package:beyond_tv/src/realtime/backoff.dart';
 import 'package:beyond_tv/src/remote/app_log.dart';
+import 'package:beyond_tv/src/system/system_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +23,14 @@ const _saved = Credentials(
   server: pcSala,
 );
 
+const _defaultSystem = SystemStatus(
+  startOnBoot: true,
+  canDrawOverlays: true,
+  sdkInt: 28,
+  kioskEnabled: false,
+  isDefaultLauncher: false,
+);
+
 void main() {
   late Directory mediaDir;
   late FakeConnector connector;
@@ -29,11 +38,13 @@ void main() {
   late MemoryManifestStore manifests;
   late FakePlayerLog playerLog;
   late List<http.Request> deletes;
+  late FakeSystemSettings system;
 
   Future<void> open(
     WidgetTester tester, {
     bool paired = true,
     bool serverUp = true,
+    SystemStatus? systemStatus,
   }) async {
     useTvScreen(tester);
     connector = FakeConnector();
@@ -41,6 +52,7 @@ void main() {
     manifests = MemoryManifestStore();
     playerLog = FakePlayerLog();
     deletes = [];
+    system = FakeSystemSettings(systemStatus ?? _defaultSystem);
     await tester.pumpWidget(
       TvApp(
         mediaRoot: () async => mediaDir,
@@ -60,6 +72,7 @@ void main() {
         backoffFactory: () => Backoff(initial: const Duration(hours: 1)),
         manifestStore: manifests,
         webPlayer: fakeWebPlayer(playerLog),
+        systemSettings: system,
       ),
     );
     await tester.pump();
@@ -271,5 +284,189 @@ void main() {
 
     expect(find.text('Menu da TV'), findsNothing);
     await close(tester);
+  });
+
+  group('Sistema', () {
+    testWidgets('mostra o status do fake', (tester) async {
+      await open(tester);
+      await openMenu(tester);
+      await tester.pump();
+
+      expect(find.text('Sistema'), findsOneWidget);
+      expect(find.text('Abrir ao ligar a TV'), findsOneWidget);
+      expect(find.text('Sim'), findsOneWidget);
+      expect(find.text('Desligado'), findsOneWidget);
+      expect(find.textContaining('permissão de sobreposição'), findsOneWidget);
+      await close(tester);
+    });
+
+    testWidgets('alterna Abrir ao ligar e registra no log', (tester) async {
+      await open(tester);
+      await openMenu(tester);
+
+      await tester.tap(find.text('Abrir ao ligar a TV'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(system.calls, ['setStartOnBoot:false']);
+      expect(find.text('Não'), findsOneWidget);
+      expect(find.textContaining('Abrir ao ligar a TV: não'), findsOneWidget);
+      await close(tester);
+    });
+
+    testWidgets('alterna o modo quiosque e mostra o botão de launcher', (
+      tester,
+    ) async {
+      await open(tester);
+      await openMenu(tester);
+      expect(find.text('Escolher launcher padrão'), findsNothing);
+
+      await tester.tap(find.text('Modo quiosque'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(system.calls, ['setKioskEnabled:true']);
+      expect(find.text('Ligado'), findsOneWidget);
+      expect(find.textContaining('Modo quiosque: ligado'), findsOneWidget);
+      expect(find.text('Escolher launcher padrão'), findsOneWidget);
+
+      await tester.tap(find.text('Escolher launcher padrão'));
+      await tester.pump();
+      expect(system.calls.last, 'openHomeSettings');
+      await close(tester);
+    });
+
+    testWidgets('launcher padrão esconde o botão de launcher', (tester) async {
+      await open(
+        tester,
+        systemStatus: const SystemStatus(
+          startOnBoot: true,
+          canDrawOverlays: true,
+          sdkInt: 33,
+          kioskEnabled: true,
+          isDefaultLauncher: true,
+        ),
+      );
+      await openMenu(tester);
+
+      expect(find.text('Escolher launcher padrão'), findsNothing);
+      expect(find.text('Permitir sobreposição'), findsNothing);
+      await close(tester);
+    });
+
+    testWidgets('sobreposição só aparece com sdk 29+ e sem permissão', (
+      tester,
+    ) async {
+      await open(
+        tester,
+        systemStatus: const SystemStatus(
+          startOnBoot: true,
+          canDrawOverlays: false,
+          sdkInt: 28,
+          kioskEnabled: false,
+          isDefaultLauncher: false,
+        ),
+      );
+      await openMenu(tester);
+      expect(find.text('Permitir sobreposição'), findsNothing);
+      await close(tester);
+
+      await open(
+        tester,
+        systemStatus: const SystemStatus(
+          startOnBoot: true,
+          canDrawOverlays: false,
+          sdkInt: 29,
+          kioskEnabled: false,
+          isDefaultLauncher: false,
+        ),
+      );
+      await openMenu(tester);
+      expect(find.text('Permitir sobreposição'), findsOneWidget);
+      await tester.tap(find.text('Permitir sobreposição'));
+      await tester.pump();
+      expect(system.calls, ['openOverlaySettings']);
+      await close(tester);
+    });
+
+    testWidgets('sem o lado nativo mostra indisponível', (tester) async {
+      await open(tester, systemStatus: SystemStatus.unavailable);
+      await openMenu(tester);
+
+      expect(find.text('Sistema: indisponível'), findsOneWidget);
+      expect(find.text('Modo quiosque'), findsNothing);
+      await close(tester);
+    });
+  });
+
+  group('Voltar', () {
+    var exits = 0;
+
+    setUp(() {
+      exits = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'SystemNavigator.pop') exits++;
+        return null;
+      });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+
+    testWidgets('sem quiosque sai do app', (tester) async {
+      await open(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(exits, 1);
+      await close(tester);
+    });
+
+    testWidgets('quiosque como launcher bloqueia; o menu ainda fecha', (
+      tester,
+    ) async {
+      await open(
+        tester,
+        systemStatus: const SystemStatus(
+          startOnBoot: true,
+          canDrawOverlays: true,
+          sdkInt: 33,
+          kioskEnabled: true,
+          isDefaultLauncher: true,
+        ),
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(exits, 0);
+
+      await openMenu(tester);
+      expect(find.text('Menu da TV'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.text('Menu da TV'), findsNothing);
+      expect(exits, 0);
+      await close(tester);
+    });
+
+    testWidgets('quiosque ligado sem ser o launcher não bloqueia', (
+      tester,
+    ) async {
+      await open(
+        tester,
+        systemStatus: const SystemStatus(
+          startOnBoot: true,
+          canDrawOverlays: true,
+          sdkInt: 33,
+          kioskEnabled: true,
+          isDefaultLauncher: false,
+        ),
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(exits, 1);
+      await close(tester);
+    });
   });
 }

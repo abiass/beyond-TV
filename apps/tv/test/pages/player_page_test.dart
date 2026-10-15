@@ -11,6 +11,7 @@ import 'package:beyond_tv/src/content/content_controller.dart';
 import 'package:beyond_tv/src/pages/player_page.dart';
 import 'package:beyond_tv/src/realtime/device_connection.dart';
 import 'package:beyond_tv/src/player/video_player_view.dart';
+import 'package:beyond_tv/src/player/web_player.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,6 +41,65 @@ ContentManifest _site(String url) => ContentManifest(
 Envelope _sync(String url) =>
     Envelope.create(MessageTypes.contentSync, payload: _site(url).toJson());
 
+/// Web falso com ciclo de vida: conta criações, descartes e URLs recebidas.
+class _WebLife {
+  int created = 0;
+  int alive = 0;
+  int reloads = 0;
+  final List<String> urls = [];
+
+  Widget build(
+    BuildContext context,
+    String url,
+    void Function(WebPlayerController) onCreated,
+  ) =>
+      _LifeWeb(life: this, url: url, onCreated: onCreated);
+}
+
+class _LifeWeb extends StatefulWidget {
+  const _LifeWeb({
+    required this.life,
+    required this.url,
+    required this.onCreated,
+  });
+
+  final _WebLife life;
+  final String url;
+  final void Function(WebPlayerController) onCreated;
+
+  @override
+  State<_LifeWeb> createState() => _LifeWebState();
+}
+
+class _LifeWebState extends State<_LifeWeb> implements WebPlayerController {
+  @override
+  void initState() {
+    super.initState();
+    widget.life.created++;
+    widget.life.alive++;
+    widget.life.urls.add(widget.url);
+    widget.onCreated(this);
+  }
+
+  @override
+  void didUpdateWidget(_LifeWeb old) {
+    super.didUpdateWidget(old);
+    if (old.url != widget.url) widget.life.urls.add(widget.url);
+  }
+
+  @override
+  void dispose() {
+    widget.life.alive--;
+    super.dispose();
+  }
+
+  @override
+  Future<void> reload() async => widget.life.reloads++;
+
+  @override
+  Widget build(BuildContext context) => Text('WEB:${widget.url}');
+}
+
 /// Vídeo falso: mostra `VIDEO:<nome>` e deixa o teste terminar o vídeo.
 class _FakeVideo implements VideoSurfaceController {
   _FakeVideo(this.file);
@@ -63,6 +123,12 @@ class _FakeVideo implements VideoSurfaceController {
 
   @override
   Future<void> dispose() async => disposed = true;
+}
+
+File? _fileOf(ImageProvider p) {
+  // ResizeImage guarda o provider original em `imageProvider`.
+  final inner = p is ResizeImage ? p.imageProvider : p;
+  return inner is FileImage ? inner.file : null;
 }
 
 String _shaOf(String content) =>
@@ -92,10 +158,10 @@ Envelope _syncItems(List<ContentItem> items) => Envelope.create(
 void main() {
   late Directory mediaDir;
   late List<_FakeVideo> videos;
+  late _WebLife webLife;
   late FakeConnector connector;
   late MemoryCredentialStore credentials;
   late MemoryManifestStore manifests;
-  late FakePlayerLog log;
 
   var clockNow = DateTime(2026, 10, 14, 7, 0);
 
@@ -104,8 +170,8 @@ void main() {
     connector = FakeConnector();
     credentials = MemoryCredentialStore(_saved);
     manifests = MemoryManifestStore();
-    log = FakePlayerLog();
     videos = [];
+    webLife = _WebLife();
     await tester.pumpWidget(
       TvApp(
         mediaRoot: () async => mediaDir,
@@ -124,7 +190,7 @@ void main() {
         connector: connector.call,
         backoffFactory: () => Backoff(initial: const Duration(hours: 1)),
         manifestStore: manifests,
-        webPlayer: fakeWebPlayer(log),
+        webPlayer: webLife.build,
         now: () => clockNow,
       ),
     );
@@ -152,8 +218,8 @@ void main() {
 
   bool isCachedImage(Widget w, String content) =>
       w is Image &&
-      w.image is FileImage &&
-      (w.image as FileImage).file.path.endsWith(_shaOf(content));
+      w.image is ResizeImage &&
+      _fileOf(w.image)?.path.endsWith(_shaOf(content)) == true;
 
   Future<void> close(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
@@ -190,7 +256,7 @@ void main() {
 
     final reload = Envelope.create(MessageTypes.cmdReload);
     await deliver(tester, reload);
-    expect(log.reloads, 1);
+    expect(webLife.reloads, 1);
     final acks = connector.last.envelopes.where((e) => e.type == 'ack');
     expect(
       acks.map((e) => AckPayload.fromJson(e.payload).ref),
@@ -383,6 +449,123 @@ void main() {
       find.byWidgetPredicate((w) => isCachedImage(w, 'a')),
       findsOneWidget,
     );
+    await close(tester);
+  });
+
+  testWidgets('imagem é decodificada no tamanho da tela e sai do cache', (
+    tester,
+  ) async {
+    cacheFile('a');
+    cacheFile('b');
+    await open(tester);
+    await deliver(
+      tester,
+      _syncItems([_image('a', seconds: 5), _image('b', seconds: 5)]),
+    );
+    await settle(tester);
+    final first = tester.widget<Image>(
+      find.byWidgetPredicate((w) => isCachedImage(w, 'a')),
+    );
+    final resize = first.image as ResizeImage;
+    expect(resize.width, 1920);
+    expect(resize.height, 1080);
+    expect(resize.policy, ResizeImagePolicy.fit);
+    expect(PaintingBinding.instance.imageCache.maximumSizeBytes, 64 << 20);
+
+    final cache = PaintingBinding.instance.imageCache;
+    final key = await resize.obtainKey(ImageConfiguration.empty);
+    cache.putIfAbsent(
+      key,
+      () => resize.loadImage(
+        key,
+        PaintingBinding.instance.instantiateImageCodecWithSize,
+      ),
+    );
+    expect(cache.containsKey(key), isTrue);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 1));
+    expect(cache.containsKey(key), isFalse);
+    await close(tester);
+    expect(cache.maximumSizeBytes, isNot(64 << 20));
+  });
+
+  testWidgets('vídeo -> vídeo nunca tem dois vivos', (tester) async {
+    cacheFile('v1');
+    cacheFile('v2');
+    await open(tester);
+    await deliver(tester, _syncItems([_video('v1'), _video('v2')]));
+    await settle(tester);
+    expect(videos, hasLength(1));
+
+    videos.single.completed!();
+    await tester.pump();
+    expect(videos, hasLength(2));
+    // Corte seco: o primeiro já foi liberado no mesmo quadro.
+    expect(videos.where((v) => !v.disposed), hasLength(1));
+    expect(videos[0].disposed, isTrue);
+    expect(find.text('VIDEO:${_shaOf('v1')}'), findsNothing);
+    await close(tester);
+  });
+
+  testWidgets('site -> site reaproveita a WebView; site -> imagem descarta', (
+    tester,
+  ) async {
+    cacheFile('a');
+    await open(tester);
+    await deliver(
+      tester,
+      _syncItems([
+        const ContentItem(
+          mediaId: 's1',
+          kind: MediaKinds.url,
+          name: 'S1',
+          url: 'https://example.local/1',
+          durationSeconds: 5,
+        ),
+        const ContentItem(
+          mediaId: 's2',
+          kind: MediaKinds.url,
+          name: 'S2',
+          url: 'https://example.local/2',
+          durationSeconds: 5,
+        ),
+        _image('a', seconds: 5),
+      ]),
+    );
+    await settle(tester);
+    expect(webLife.created, 1);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(webLife.created, 1);
+    expect(webLife.alive, 1);
+    expect(
+      webLife.urls,
+      [
+        'https://example.local/1',
+        'https://example.local/2',
+      ],
+    );
+    expect(find.text('WEB:https://example.local/2'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(webLife.alive, 0);
+    await close(tester);
+  });
+
+  testWidgets('vídeo -> imagem descarta o vídeo no mesmo quadro', (
+    tester,
+  ) async {
+    cacheFile('v');
+    cacheFile('a');
+    await open(tester);
+    await deliver(tester, _syncItems([_video('v'), _image('a', seconds: 5)]));
+    await settle(tester);
+    videos.single.completed!();
+    await tester.pump();
+    expect(videos.single.disposed, isTrue);
     await close(tester);
   });
 

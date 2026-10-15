@@ -70,6 +70,15 @@ jobs:
         working-directory: apps/tv
         run: flutter build apk --debug
 
+      # Para instalar numa TV de teste sem compilar localmente.
+      - name: Publica o APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: beyond-tv-debug-apk
+          path: apps/tv/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7
+          if-no-files-found: error
+
   gitleaks:
     name: Varredura de segredos
     runs-on: ubuntu-latest

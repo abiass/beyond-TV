@@ -1,12 +1,17 @@
 package dev.beyondtv.beyond_tv
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.PixelCopy
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 
@@ -22,6 +27,60 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SYSTEM_CHANNEL)
+            .setMethodCallHandler { call, result -> handleSystem(call, result) }
+    }
+
+    private fun handleSystem(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            when (call.method) {
+                "getStatus" -> result.success(
+                    mapOf(
+                        "startOnBoot" to SystemSupport.startOnBoot(this),
+                        "canDrawOverlays" to Settings.canDrawOverlays(this),
+                        "sdkInt" to Build.VERSION.SDK_INT,
+                        "kioskEnabled" to SystemSupport.kioskEnabled(this),
+                        "isDefaultLauncher" to SystemSupport.isDefaultLauncher(this),
+                    )
+                )
+                "setStartOnBoot" -> {
+                    SystemSupport.setStartOnBoot(this, call.argument<Boolean>("enabled") ?: true)
+                    result.success(null)
+                }
+                "setKioskEnabled" -> {
+                    SystemSupport.setKioskEnabled(this, call.argument<Boolean>("enabled") ?: false)
+                    result.success(null)
+                }
+                "openOverlaySettings" -> result.success(
+                    openSettings(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        ),
+                        null
+                    )
+                )
+                "openHomeSettings" -> result.success(
+                    openSettings(Intent(Settings.ACTION_HOME_SETTINGS), Intent(Settings.ACTION_SETTINGS))
+                )
+                else -> result.notImplemented()
+            }
+        } catch (e: Exception) {
+            result.error("system_failed", e.message, null)
+        }
+    }
+
+    /** Abre [primary]; sem a tela, tenta [fallback]. `false` se nenhuma existir. */
+    private fun openSettings(primary: Intent, fallback: Intent?): Boolean {
+        for (intent in listOfNotNull(primary, fallback)) {
+            try {
+                startActivity(intent)
+                return true
+            } catch (e: ActivityNotFoundException) {
+                // Algumas TVs não têm essa tela; tenta a próxima.
+            }
+        }
+        return false
     }
 
     /** Captura a janela inteira (inclui WebView e vídeo) e devolve um JPEG. */
@@ -102,6 +161,7 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val SCREENSHOT_CHANNEL = "beyond_tv/screenshot"
+        private const val SYSTEM_CHANNEL = "beyond_tv/system"
         private const val DEFAULT_MAX_WIDTH = 1280
         private const val JPEG_QUALITY = 70
     }

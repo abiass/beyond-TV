@@ -7,6 +7,27 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [0.10.0] — Fase 10: robustez no Android TV
+
+### Adicionado
+
+- O app abre sozinho quando a TV liga e depois de ser atualizado. No
+  Android 10 ou mais novo, isso exige a permissão de sobreposição ou o
+  modo quiosque.
+- Modo quiosque opcional: o app pode virar o launcher da TV, e o Voltar
+  não sai dele. Liga e desliga pelo menu oculto, na seção Sistema.
+- Assinatura de release por `apps/tv/android/key.properties`, fora do
+  git.
+- Guia de instalação na TV (`docs/instalacao-tv.md`): adb, pen drive,
+  abrir ao ligar, quiosque e assinatura.
+- O CI guarda o APK de debug como artefato por 7 dias.
+
+### Alterado
+
+- Menos memória em TVs baratas: imagens decodificadas no tamanho da tela,
+  no máximo um vídeo e uma WebView vivos por vez, e a mesma WebView
+  reaproveitada entre sites seguidos. O fade ficou só entre imagens.
+
 ## [0.9.0] — Fase 9: operação remota
 
 ### Adicionado

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:beyond_protocol/beyond_protocol.dart';
+import 'package:beyond_tv/src/system/system_settings.dart';
 import 'package:beyond_tv/src/device/credentials.dart';
 import 'package:beyond_tv/src/player/web_player.dart';
 import 'package:beyond_tv/src/device/device_info_source.dart';
@@ -144,5 +145,41 @@ class FakeScreenCapturer implements ScreenCapturer {
     widths.add(maxWidth);
     if (error != null) throw error!;
     return image!;
+  }
+}
+
+/// Opções de sistema falsas: guardam o estado e registram as chamadas.
+class FakeSystemSettings implements SystemSettings {
+  FakeSystemSettings(this.status);
+
+  SystemStatus status;
+  final List<String> calls = [];
+  bool overlayOpens = true;
+
+  @override
+  Future<SystemStatus> getStatus() async => status;
+
+  @override
+  Future<void> setStartOnBoot(bool enabled) async {
+    calls.add('setStartOnBoot:$enabled');
+    status = status.copyWith(startOnBoot: enabled);
+  }
+
+  @override
+  Future<void> setKioskEnabled(bool enabled) async {
+    calls.add('setKioskEnabled:$enabled');
+    status = status.copyWith(kioskEnabled: enabled);
+  }
+
+  @override
+  Future<bool> openOverlaySettings() async {
+    calls.add('openOverlaySettings');
+    return overlayOpens;
+  }
+
+  @override
+  Future<bool> openHomeSettings() async {
+    calls.add('openHomeSettings');
+    return true;
   }
 }
