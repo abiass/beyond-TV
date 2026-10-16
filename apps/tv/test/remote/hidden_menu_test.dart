@@ -5,6 +5,7 @@ import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:beyond_tv/src/app.dart';
 import 'package:beyond_tv/src/content/manifest_store.dart';
 import 'package:beyond_tv/src/device/credentials.dart';
+import 'package:beyond_tv/src/device/device_info_source.dart';
 import 'package:beyond_tv/src/realtime/backoff.dart';
 import 'package:beyond_tv/src/remote/app_log.dart';
 import 'package:beyond_tv/src/system/system_settings.dart';
@@ -119,7 +120,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Conexão: Conectada'), findsOneWidget);
-    expect(find.textContaining('Versão do app: 1.0.0'), findsOneWidget);
+    expect(find.textContaining('Versão do app: $appVersion'), findsOneWidget);
     expect(find.textContaining('Revisão do manifesto: '), findsOneWidget);
     expect(find.textContaining('Cache: 1 arquivo · 2,0 KB'), findsOneWidget);
     expect(find.textContaining('linha de teste do log'), findsOneWidget);
