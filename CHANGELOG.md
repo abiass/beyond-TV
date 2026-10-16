@@ -7,6 +7,8 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [1.2.0] — 2026-10-16
+
 ### Adicionado
 
 - Pareamento por aprovação no painel: a TV pede para entrar e mostra um
@@ -27,6 +29,13 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Teclado de pareamento da TV: descendo pelas fileiras, o foco do controle
   saía do teclado e ficava preso sem nenhuma seta para voltar. Também
   voltava a ficar sem foco depois de um código errado.
+
+### Alterado
+
+- Versão 1.2.0 no servidor, no app da TV, no dashboard e no
+  `beyond_protocol`. O APK passa a ser assinado com uma chave de release
+  nova: TVs com a 1.0.0 precisam desinstalar o app e parear de novo uma
+  vez.
 
 ## [1.0.0] — 2026-10-15 — Fase 11: release 1.0
 
