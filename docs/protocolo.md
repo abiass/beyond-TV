@@ -162,6 +162,70 @@ sugerido a partir de fabricante e modelo (`Acme TV 4K`), ou `Nova TV`.
   de `serverId` diferente.
 - A TV usa o token na conexão em tempo real (`WS /ws/device`, abaixo).
 
+### Aprovação no painel (1.1)
+
+Desde a 1.1, a TV não precisa digitar nada: ela pede para entrar e o
+administrador aprova no painel. O código digitado continua valendo.
+
+```mermaid
+sequenceDiagram
+    actor Admin
+    participant D as Dashboard
+    participant S as Servidor
+    participant T as App TV
+
+    T->>S: POST /api/v1/pair-requests { deviceInfo }
+    S-->>T: 201 { id, secret, confirmCode, expiresAt }
+    S-->>D: pair_request.created (WS)
+    T->>T: mostra o confirmCode
+    loop a cada 2 s
+        T->>S: GET /api/v1/pair-requests/:id (Bearer secret)
+        S-->>T: { status: "pending" }
+    end
+    Admin->>D: confere o código e clica em Aprovar
+    D->>S: POST /api/v1/pair-requests/:id/approve
+    S-->>D: 200 DeviceSummary + device.paired e pair_request.closed (WS)
+    T->>S: GET /api/v1/pair-requests/:id (Bearer secret)
+    S-->>T: { status: "approved", deviceId, deviceToken, serverId }
+```
+
+| Método | Rota | Auth | Resposta |
+|--------|------|------|----------|
+| POST | `/pair-requests` | — | `201 PairRequestTicket`. Corpo `{ "deviceInfo" }`. `429 too_many_requests` acima de 5 por minuto por IP; `429 too_many_pair_requests` com 20 pedidos abertos. |
+| GET | `/pair-requests/:id` | TV (`Bearer <secret>`) | `200 { "status" }`: `pending`, `rejected`, `expired` ou `approved` (com as credenciais, como em `POST /pair`). |
+| DELETE | `/pair-requests/:id` | TV (`Bearer <secret>`) | `204`. A TV desistiu (saiu da tela). |
+| GET | `/pair-requests` | admin | `200 { "requests": [PendingPairRequest…] }`, do mais antigo para o mais novo. |
+| POST | `/pair-requests/:id/approve` | admin | `200 DeviceSummary`. Cadastra a TV com o nome sugerido. |
+| POST | `/pair-requests/:id/reject` | admin | `204`. |
+
+```json
+// PairRequestTicket (só a TV recebe o secret)
+{ "id": "…", "secret": "…", "confirmCode": "4821", "expiresAt": "…" }
+// PendingPairRequest (painel)
+{ "id": "…", "confirmCode": "4821", "deviceInfo": { … }, "ip": "192.168.0.42",
+  "createdAt": "…", "expiresAt": "…" }
+```
+
+Regras:
+
+- O pedido vale 10 minutos (`pairRequestTtl`) e fica só na memória do
+  servidor, como os códigos. Aprovar, recusar ou consultar um pedido vencido,
+  já decidido ou esquecido responde `404`; a TV então abre outro pedido.
+- `confirmCode` tem 4 dígitos e não se repete entre os pedidos abertos. Ele
+  não é segredo: serve para o administrador conferir que aprova a TV certa.
+- O `secret` (32 bytes, base64url) só aparece no `201`; o servidor guarda o
+  SHA-256. Segredo errado ou ausente responde `404`, como pedido inexistente.
+- As credenciais saem **uma única vez**: a consulta que recebe `approved`
+  apaga o pedido.
+- Cada IP tem no máximo um pedido aberto: um pedido novo substitui o
+  anterior (que gera `pair_request.closed`).
+- Eventos no `WS /ws/admin`: `pair_request.created` (`PendingPairRequest`) e
+  `pair_request.closed` (`{ "id" }`, ao aprovar, recusar, substituir ou a TV
+  desistir). O vencimento não gera evento; o painel tira o pedido pelo
+  `expiresAt`.
+- Um servidor 1.0 responde `404` ao `POST /pair-requests`; a TV então vai
+  direto para o código digitado.
+
 ## TVs
 
 | Método | Rota | Auth | Corpo | Resposta |
@@ -249,6 +313,8 @@ salvo (o PC pode ter trocado de IP pelo DHCP).
 | `device.offline` | `{ "deviceId", "lastSeenAt" }` |
 | `device.state` | `DeviceSummary` atualizado (hello, heartbeat com outro `currentItem`, renomeação). |
 | `device.removed` | `{ "deviceId" }` |
+| `pair_request.created` | `PendingPairRequest` (veja *Aprovação no painel*). |
+| `pair_request.closed` | `{ "id" }` |
 
 O servidor manda ping a cada 30 s nos dois canais para detectar conexões
 mortas.

@@ -53,8 +53,14 @@ assinado com a mesma chave do instalado.
 1. Deixe o servidor rodando no PC (veja o README) e conecte a TV na mesma
    rede.
 2. Abra o app. Ele procura o servidor sozinho; se não achar, use *Digitar IP*.
-3. No painel, clique em *Adicionar TV*. Digite na TV o código que aparece no
-   painel. Depois, renomeie a TV no painel.
+3. Escolha o servidor. A TV mostra um código de 4 dígitos e aparece no painel
+   em *Aguardando aprovação*. Confira se o código é o mesmo e clique em
+   *Aprovar*. Depois, renomeie a TV no painel.
+
+   Prefere digitar um código? Na TV, escolha *Digitar código*; no painel,
+   clique em *Adicionar TV* e digite na TV o código de 6 caracteres que
+   aparecer. Servidores 1.0 só aceitam esse caminho, e a TV vai direto para
+   ele.
 
 ## 5. Abrir sozinho ao ligar
 

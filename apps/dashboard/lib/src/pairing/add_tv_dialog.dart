@@ -214,8 +214,8 @@ class _WaitingContent extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
-          'Abra o app Beyond TV na TV, escolha este servidor e digite o '
-          'código:',
+          'Abra o app Beyond TV na TV, escolha este servidor, toque em '
+          '"Digitar código" e digite:',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),

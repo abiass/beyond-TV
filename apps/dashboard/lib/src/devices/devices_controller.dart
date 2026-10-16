@@ -101,6 +101,18 @@ class DevicesController extends AsyncNotifier<List<DeviceSummary>> {
     ]);
   }
 
+  /// Põe [device] na lista, ou atualiza se já está (ex.: recém-aprovada; o
+  /// evento `device.paired` pode chegar antes ou depois).
+  void upsert(DeviceSummary device) {
+    final list = _current;
+    if (list == null) return;
+    state = AsyncData(
+      list.any((d) => d.id == device.id)
+          ? [for (final d in list) d.id == device.id ? device : d]
+          : [device, ...list],
+    );
+  }
+
   /// Troca a TV pela versão devolvida pela API (ex.: após mudar o conteúdo).
   void replace(DeviceSummary device) {
     state = AsyncData([

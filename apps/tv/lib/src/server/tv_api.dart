@@ -51,6 +51,56 @@ class TvApi {
     }
   }
 
+  /// Pede ao servidor para aprovar esta TV no painel.
+  ///
+  /// Um servidor anterior à 1.1 não tem a rota: responde
+  /// [TvApiException] com código `not_found`.
+  Future<PairRequestTicket> requestApproval(
+    ServerAddress server,
+    DeviceInfo deviceInfo,
+  ) async {
+    final request =
+        http.Request('POST', server.resolve('/api/v1/pair-requests'))
+          ..headers['content-type'] = 'application/json'
+          ..body = jsonEncode({'deviceInfo': deviceInfo.toJson()});
+    final json = await _send(request);
+    try {
+      return PairRequestTicket.fromJson(json);
+    } on ProtocolException {
+      throw _notBeyondServer;
+    }
+  }
+
+  /// Situação do pedido [ticket]. Pedido esquecido pelo servidor (vencido
+  /// há muito, servidor reiniciado) responde código `not_found`.
+  Future<PairRequestPoll> pollApproval(
+    ServerAddress server,
+    PairRequestTicket ticket,
+  ) async {
+    final request = http.Request('GET', _ticketUri(server, ticket))
+      ..headers['Authorization'] = 'Bearer ${ticket.secret}';
+    final json = await _send(request);
+    try {
+      return PairRequestPoll.fromJson(json);
+    } on ProtocolException {
+      throw _notBeyondServer;
+    }
+  }
+
+  /// Desiste do pedido [ticket]. Quem chama ignora a falha: o pedido vence
+  /// sozinho.
+  Future<void> cancelApproval(
+    ServerAddress server,
+    PairRequestTicket ticket,
+  ) async {
+    final request = http.Request('DELETE', _ticketUri(server, ticket))
+      ..headers['Authorization'] = 'Bearer ${ticket.secret}';
+    await _send(request, timeout: unpairTimeout);
+  }
+
+  Uri _ticketUri(ServerAddress server, PairRequestTicket ticket) =>
+      server.resolve('/api/v1/pair-requests/${Uri.encodeComponent(ticket.id)}');
+
   /// A TV se remove do servidor (`DELETE /api/v1/device`, com o Bearer da
   /// TV). Quem chama ignora a falha: desparear localmente não depende dele.
   Future<void> unpairSelf(ServerAddress server, String token) async {

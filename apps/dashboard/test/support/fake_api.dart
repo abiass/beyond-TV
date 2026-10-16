@@ -117,6 +117,50 @@ class FakeApi implements ApiClient {
     devices.removeWhere((d) => d.id == id);
   }
 
+  /// Pedidos de aprovação pendentes.
+  final pairRequests = <PendingPairRequest>[];
+
+  /// Pedidos aprovados e recusados, em ordem.
+  final approved = <String>[];
+  final rejected = <String>[];
+
+  @override
+  Future<List<PendingPairRequest>> listPairRequests() async {
+    _maybeFail();
+    return [...pairRequests];
+  }
+
+  @override
+  Future<DeviceSummary> approvePairRequest(String id) async {
+    _maybeFail();
+    final request = pairRequests.firstWhere(
+      (r) => r.id == id,
+      orElse: () => throw const ApiException(
+        'Pedido não encontrado.',
+        code: 'not_found',
+        status: 404,
+      ),
+    );
+    pairRequests.remove(request);
+    approved.add(id);
+    final device = DeviceSummary(
+      id: 'tv-$id',
+      name: request.deviceInfo.suggestedName,
+      online: false,
+      createdAt: DateTime.utc(2026, 10, 16),
+      info: request.deviceInfo,
+    );
+    devices.insert(0, device);
+    return device;
+  }
+
+  @override
+  Future<void> rejectPairRequest(String id) async {
+    _maybeFail();
+    pairRequests.removeWhere((r) => r.id == id);
+    rejected.add(id);
+  }
+
   /// Sites salvos que [listMedia] devolve.
   final media = <Media>[];
 

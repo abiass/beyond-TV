@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -9,6 +10,7 @@ import 'device/device_info_source.dart';
 import 'content/content_controller.dart';
 import 'content/manifest_store.dart';
 import 'media/media_cache.dart';
+import 'pages/approval_page.dart';
 import 'pages/player_page.dart';
 import 'player/video_player_view.dart';
 import 'player/web_player.dart';
@@ -173,26 +175,42 @@ class TvApp extends StatelessWidget {
     );
   }
 
+  /// Abre o pareamento com [server]: primeiro pede aprovação no painel; o
+  /// código digitado fica como alternativa (e para servidores antigos).
   void _openPairing(BuildContext context, ServerAddress server) {
     final navigator = Navigator.of(context);
+
+    Future<void> onPaired(PairResponse pair) async {
+      final saved = Credentials.fromPairing(server, pair);
+      await credentials.save(saved);
+      final cache = await _openCache();
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => _paired(saved, cache)),
+        (_) => false,
+      );
+    }
+
+    void useCode() => navigator.pushReplacement(
+          MaterialPageRoute<void>(
+            builder: (_) => PairingPage(
+              server: server,
+              api: api,
+              deviceInfo: deviceInfo,
+              onChangeServer: navigator.pop,
+              onPaired: onPaired,
+            ),
+          ),
+        );
+
     navigator.push(
       MaterialPageRoute<void>(
-        builder: (_) => PairingPage(
+        builder: (_) => ApprovalPage(
           server: server,
           api: api,
           deviceInfo: deviceInfo,
           onChangeServer: navigator.pop,
-          onPaired: (pair) async {
-            final saved = Credentials.fromPairing(server, pair);
-            await credentials.save(saved);
-            final cache = await _openCache();
-            navigator.pushAndRemoveUntil(
-              MaterialPageRoute<void>(
-                builder: (_) => _paired(saved, cache),
-              ),
-              (_) => false,
-            );
-          },
+          onUseCode: useCode,
+          onPaired: onPaired,
         ),
       ),
     );

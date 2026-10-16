@@ -38,6 +38,25 @@ class _PairingPageState extends State<PairingPage> {
   bool _busy = false;
   String? _error;
 
+  final _keyboard = GlobalKey<PairingKeyboardState>();
+  final _changeServerFocus = FocusNode(debugLabel: 'Trocar servidor');
+
+  @override
+  void dispose() {
+    _changeServerFocus.dispose();
+    super.dispose();
+  }
+
+  /// Do "Trocar servidor", a seta à direita volta ao teclado.
+  KeyEventResult _onChangeServerKey(FocusNode _, KeyEvent event) {
+    if (event is KeyUpEvent ||
+        event.logicalKey != LogicalKeyboardKey.arrowRight) {
+      return KeyEventResult.ignored;
+    }
+    _keyboard.currentState?.focusLastKey();
+    return KeyEventResult.handled;
+  }
+
   void _type(String char) {
     if (_busy || _code.length >= pairingCodeLength) return;
     setState(() {
@@ -116,7 +135,11 @@ class _PairingPageState extends State<PairingPage> {
     final server = widget.server;
 
     return Scaffold(
+      // Só escuta as teclas que sobem das filhas; focável, prendia o foco
+      // do D-pad sem nenhuma seta para sair.
       body: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
         onKeyEvent: _onKey,
         child: SafeArea(
           child: Padding(
@@ -180,10 +203,16 @@ class _PairingPageState extends State<PairingPage> {
                           style: textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
-                        TvButton(
-                          icon: Icons.swap_horiz,
-                          label: 'Trocar servidor',
-                          onPressed: _busy ? null : widget.onChangeServer,
+                        Focus(
+                          canRequestFocus: false,
+                          skipTraversal: true,
+                          onKeyEvent: _onChangeServerKey,
+                          child: TvButton(
+                            icon: Icons.swap_horiz,
+                            label: 'Trocar servidor',
+                            focusNode: _changeServerFocus,
+                            onPressed: _busy ? null : widget.onChangeServer,
+                          ),
                         ),
                       ],
                     ),
@@ -191,7 +220,9 @@ class _PairingPageState extends State<PairingPage> {
                 ),
                 const SizedBox(width: 48),
                 PairingKeyboard(
+                  key: _keyboard,
                   enabled: !_busy,
+                  exitLeft: _changeServerFocus,
                   onCharacter: _type,
                   onBackspace: _backspace,
                   onClear: _clear,

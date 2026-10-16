@@ -18,9 +18,10 @@ novo, todos na mesma rede.
 3. Abra `http://localhost:8787` no navegador e crie o administrador.
 4. **Na TV:** instale o APK por pen drive ou `adb`
    ([passo a passo](docs/instalacao-tv.md)) e abra o app.
-5. No painel, clique em **Adicionar TV** e digite na TV o código que
-   aparecer. A TV acha o servidor sozinha; se não achar, use **Digitar IP**
-   com o IP do PC.
+5. A TV acha o servidor sozinha (se não achar, use **Digitar IP** com o IP
+   do PC) e aparece no painel em **Aguardando aprovação**. Confira o código
+   de 4 dígitos que está na tela da TV e clique em **Aprovar**. Também dá
+   para parear digitando um código gerado em **Adicionar TV**.
 6. Cadastre sites, imagens e vídeos em **Mídia**, monte playlists e escolha
    o que cada TV (ou grupo de TVs) exibe. Em **Agenda** você troca o
    conteúdo por dia e horário.

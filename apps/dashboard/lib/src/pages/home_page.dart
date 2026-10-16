@@ -11,6 +11,7 @@ import '../devices/format_relative.dart';
 import '../devices/remove_device_dialog.dart';
 import '../devices/rename_device_dialog.dart';
 import '../pairing/add_tv_dialog.dart';
+import '../pairing/pending_approvals.dart';
 import '../realtime/admin_events.dart';
 import '../router.dart';
 import '../theme.dart';
@@ -147,15 +148,22 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: const PendingApprovals(),
+            ),
+            const SizedBox(height: 16),
             Text('Nenhuma TV pareada ainda.', style: textTheme.titleMedium),
             const SizedBox(height: 8),
             const Text(
-              'Instale o app Beyond TV na TV e clique em "Adicionar TV".',
+              'Instale o app Beyond TV na TV e abra-o: ela aparece aqui para '
+              'você aprovar.\nSe preferir, pareie com um código em '
+              '"Adicionar TV".',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -183,8 +191,10 @@ class _DeviceList extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 720),
           child: ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-            itemCount: devices.length,
-            itemBuilder: (context, i) => _DeviceTile(device: devices[i]),
+            itemCount: devices.length + 1,
+            itemBuilder: (context, i) => i == 0
+                ? const PendingApprovals()
+                : _DeviceTile(device: devices[i - 1]),
           ),
         ),
       );
