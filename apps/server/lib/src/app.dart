@@ -39,7 +39,7 @@ import 'realtime/screenshots.dart';
 import 'schedules/schedule_store.dart';
 
 /// Versão do servidor exposta em `/health`.
-const serverVersion = '1.0.0';
+const serverVersion = '1.2.0';
 
 /// Monta o handler HTTP completo do servidor.
 ///

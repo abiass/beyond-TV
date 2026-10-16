@@ -6,7 +6,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 /// Versão do app enviada ao servidor. Mantenha igual à do `pubspec.yaml`
 /// (um teste confere).
-const appVersion = '1.0.0';
+const appVersion = '1.2.0';
 
 /// De onde vêm os dados da TV enviados no pareamento.
 abstract interface class DeviceInfoSource {

@@ -1,6 +1,6 @@
 name: beyond_server
 description: Servidor local do Beyond TV (API, tempo real e descoberta).
-version: 1.0.0
+version: 1.2.0
 publish_to: none
 resolution: workspace
 
