@@ -41,14 +41,13 @@ class ScreenshotStore {
 
   /// Registra um pedido para a TV [deviceId] e devolve o `requestId`.
   ///
-  /// Lança [TooManyRequestsException] dentro do [screenshotCooldown].
-  String begin(String deviceId) {
+  /// Lança [TooManyRequestsException] dentro do [cooldown] (no controle ao
+  /// vivo, [liveFrameCooldown]).
+  String begin(String deviceId, {Duration cooldown = screenshotCooldown}) {
     final now = _clock();
     final last = _lastRequest[deviceId];
-    if (last != null && now.difference(last) < screenshotCooldown) {
-      throw TooManyRequestsException(
-        last.add(screenshotCooldown).difference(now),
-      );
+    if (last != null && now.difference(last) < cooldown) {
+      throw TooManyRequestsException(last.add(cooldown).difference(now));
     }
     _lastRequest[deviceId] = now;
     final byId = _pending.putIfAbsent(deviceId, () => {});

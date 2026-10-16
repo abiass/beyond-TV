@@ -13,6 +13,7 @@ import '../realtime/device_connection.dart';
 import 'active_content.dart';
 import 'manifest_store.dart';
 import '../remote/app_log.dart';
+import '../remote/remote_input.dart';
 import '../remote/screen_capturer.dart';
 
 /// Guarda o que a TV exibe e executa as mensagens do servidor:
@@ -170,7 +171,48 @@ class ContentController extends ChangeNotifier {
         unawaited(_onUnpair(envelope));
       case MessageTypes.cmdScreenshot:
         unawaited(_onScreenshot(envelope));
+      case MessageTypes.cmdInput:
+        unawaited(_onInput(envelope));
     }
+  }
+
+  /// Controle remoto do painel: só funciona com um site na tela.
+  Future<void> _onInput(Envelope envelope) async {
+    final RemoteInput input;
+    try {
+      input = RemoteInput.fromJson(envelope.payload);
+    } on ProtocolException catch (e) {
+      appLog('cmd.input inválido: $e');
+      return;
+    }
+    void fail(String code, String message) {
+      if (_disposed) return;
+      connection.send(
+        Envelope.create(
+          MessageTypes.error,
+          payload: ErrorPayload(
+            ref: envelope.id,
+            code: code,
+            message: message,
+          ).toJson(),
+        ),
+      );
+    }
+
+    final Object? target = _player;
+    if (target is! RemoteInputTarget) {
+      return fail('no_web_content', 'Não há um site na tela da TV.');
+    }
+    try {
+      await target.input(input);
+    } on RemoteInputException catch (e) {
+      appLog('Controle remoto falhou ($input): ${e.message}');
+      return fail('input_failed', e.message);
+    } on Object catch (e) {
+      appLog('Controle remoto falhou ($input): ${e.runtimeType}');
+      return fail('input_failed', 'Não foi possível executar na TV.');
+    }
+    if (!_disposed) _ack(envelope);
   }
 
   void _onSync(Envelope envelope) {
@@ -337,7 +379,12 @@ class ContentController extends ChangeNotifier {
     if (capturer == null) return fail('Captura indisponível nesta TV.');
     final CapturedImage image;
     try {
-      image = await capturer.capture(maxWidth: screenshotMaxWidth);
+      final width = request.maxWidth;
+      image = await capturer.capture(
+        maxWidth: width != null && width > 0 && width < screenshotMaxWidth
+            ? width
+            : screenshotMaxWidth,
+      );
     } on Object catch (e) {
       return fail('Não foi possível capturar a tela (${e.runtimeType}).');
     }

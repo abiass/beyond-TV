@@ -28,6 +28,7 @@ void main() {
       ('DELETE', '/api/v1/devices/abc'): 'Removeu TV',
       ('PUT', '/api/v1/devices/abc/content'): 'Trocou o conteúdo da TV',
       ('POST', '/api/v1/devices/abc/commands'): 'Enviou comando para a TV',
+      ('POST', '/api/v1/devices/abc/live'): 'Abriu o controle remoto da TV',
       ('DELETE', '/api/v1/device'): 'TV se despareou',
       ('POST', '/api/v1/media/files'): 'Enviou arquivo',
       ('POST', '/api/v1/media'): 'Adicionou site',

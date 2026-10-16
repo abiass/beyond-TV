@@ -94,7 +94,11 @@ const _audited = {'POST', 'PUT', 'PATCH', 'DELETE'};
 Middleware auditLog(AuditLog audit, SessionStore sessions) =>
     (inner) => (request) async {
       final path = request.url.path;
-      if (!_audited.contains(request.method) || !path.startsWith('api/v1/')) {
+      // Quadros e entradas do controle ao vivo chegam várias vezes por
+      // segundo; a abertura do controle (`POST .../live`) é que fica gravada.
+      if (!_audited.contains(request.method) ||
+          !path.startsWith('api/v1/') ||
+          path.contains('/live/')) {
         return inner(request);
       }
       int? adminId;

@@ -315,6 +315,7 @@ salvo (o PC pode ter trocado de IP pelo DHCP).
 | `device.removed` | `{ "deviceId" }` |
 | `pair_request.created` | `PendingPairRequest` (veja *Aprovação no painel*). |
 | `pair_request.closed` | `{ "id" }` |
+| `device.input_error` | `{ "deviceId", "code", "message" }` (veja *Controle ao vivo*). |
 
 O servidor manda ping a cada 30 s nos dois canais para detectar conexões
 mortas.
@@ -600,11 +601,53 @@ sequenceDiagram
 - O painel recebe `device.screenshot` (`DeviceScreenshotEvent`) e busca a
   imagem. Se nada chega em 15 s, mostra que a TV não respondeu.
 
-**Na TV:** a captura usa `PixelCopy` da janela da activity (canal
-`beyond_tv/screenshot`, método `capture`, argumento `maxWidth`), que inclui
-WebView e vídeo. Se o canal falhar, usa a árvore do Flutter
-(`RepaintBoundary`), que pode sair sem o conteúdo de WebView e vídeo. A
-imagem é reduzida a 1280 px de largura (`screenshotMaxWidth`) e vai em JPEG.
+**Na TV:** a captura usa `PixelCopy` da `SurfaceView` em que o Flutter
+desenha tudo, inclusive WebView e vídeo, que entram como texturas (canal
+`beyond_tv/screenshot`, método `capture`, argumento `maxWidth`). Copiar a
+janela da activity sairia preto, porque a `SurfaceView` é uma camada
+separada. Se a cópia vier preta e houver uma WebView, a TV desenha a WebView
+direto. Se o canal falhar, usa a árvore do Flutter (`RepaintBoundary`). A
+imagem é reduzida a `maxWidth` do pedido (ou 1280 px, `screenshotMaxWidth`)
+e vai em JPEG.
+
+### Controle ao vivo (1.2)
+
+O painel mostra a tela da TV ao vivo e leva clique, teclado e rolagem para
+o **site** aberto nela. Serve para fazer login num sistema e deixá-lo
+rodando.
+
+| Método | Rota | Auth | Resposta |
+|--------|------|------|----------|
+| POST | `/devices/:id/live` | admin | `204`. Abre o controle; só confere a TV. Existe para a auditoria registrar quem controlou qual TV. |
+| POST | `/devices/:id/live/frame` | admin | `202 { "requestId" }`. Como a captura acima, com `maxWidth` 960 (`liveFrameMaxWidth`) e intervalo mínimo de 250 ms (`liveFrameCooldown`). |
+| POST | `/devices/:id/live/input` | admin | `202`. Corpo `RemoteInput`; vai para a TV como `cmd.input`. `400` se inválido. |
+
+As três respondem `409 device_offline` com a TV desconectada. Quadros e
+entradas (`/live/...`) ficam **fora da auditoria**, porque chegam várias
+vezes por segundo, e o texto digitado nunca vai para log nenhum (pode ser
+senha).
+
+```json
+// RemoteInput: coordenadas são frações da tela (0 a 1)
+{ "kind": "tap", "x": 0.42, "y": 0.61 }
+{ "kind": "key", "key": "enter" }        // RemoteKeys: enter, tab, shiftTab, backspace, delete, escape,
+                                         // up, down, left, right, pageUp, pageDown, home, end, back
+{ "kind": "text", "text": "fulano@empresa.com.br" }   // até 500 caracteres
+{ "kind": "scroll", "dy": 0.5, "x": 0.5, "y": 0.5 }   // telas; positivo desce, de -5 a 5
+```
+
+- O painel pede um quadro assim que o anterior chega (`device.screenshot`),
+  dando cerca de 3 por segundo. Sem resposta em 5 s, pede de novo.
+- **Na TV**, só um site aceita entradas. Toque, teclas e rolagem viram
+  eventos de toque e de teclado do Android na WebView nativa (canal
+  `beyond_tv/remote_input`, via `WebViewFlutterAndroidExternalApi`), como se
+  alguém usasse a tela. Tocar num campo fecha o teclado da TV. O texto entra
+  pelo `insertText` do navegador no campo com foco, que aceita acentos e
+  dispara os eventos `input` que os sites esperam.
+- Se não consegue, a TV responde `error` com `no_web_content` (não há site
+  na tela) ou `input_failed` (ex.: nenhum campo selecionado). O servidor
+  repassa ao painel como `device.input_error`
+  (`{ "deviceId", "code", "message" }`).
 
 ### Menu oculto da TV
 

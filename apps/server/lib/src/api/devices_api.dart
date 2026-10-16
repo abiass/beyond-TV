@@ -65,8 +65,59 @@ class DevicesApi {
       ..put('/api/v1/devices/<id>/content', admin.addHandler(_setContent))
       ..post('/api/v1/devices/<id>/commands', admin.addHandler(_command))
       ..get('/api/v1/devices/<id>/screenshot', admin.addHandler(_screenshot))
+      ..post('/api/v1/devices/<id>/live', admin.addHandler(_liveStart))
+      ..post('/api/v1/devices/<id>/live/frame', admin.addHandler(_liveFrame))
+      ..post('/api/v1/devices/<id>/live/input', admin.addHandler(_liveInput))
       ..delete('/api/v1/device', _selfUnpair);
   }
+
+  /// Abre o controle ao vivo. Não faz nada além de conferir a TV: existe
+  /// para a auditoria registrar quem controlou qual TV, já que os quadros e
+  /// as entradas (`/live/...`) ficam fora dela.
+  Response _liveStart(Request request) {
+    final id = _onlineDevice(request);
+    _log.info(LogEvent('controle ao vivo aberto', {'deviceId': id}));
+    return Response(204);
+  }
+
+  /// Pede um quadro do controle ao vivo: captura menor e com intervalo
+  /// mínimo curto. A imagem chega como as outras (`device.screenshot`).
+  Response _liveFrame(Request request) => _requestScreenshot(
+    _onlineDevice(request),
+    cooldown: liveFrameCooldown,
+    maxWidth: liveFrameMaxWidth,
+  );
+
+  /// Repassa um toque, tecla, texto ou rolagem para o site aberto na TV.
+  /// O texto nunca vai para o log: pode ser uma senha.
+  Future<Response> _liveInput(Request request) async {
+    final id = _onlineDevice(request);
+    final RemoteInput input;
+    try {
+      input = RemoteInput.fromJson(await readJsonObject(request));
+    } on ProtocolException catch (e) {
+      throw ApiException.badRequest('Entrada inválida: ${e.message}.');
+    }
+    final sent = _hub.send(
+      id,
+      Envelope.create(MessageTypes.cmdInput, payload: input.toJson()),
+    );
+    if (!sent) throw _offline;
+    return Response(202);
+  }
+
+  /// TV da rota, se existe e está conectada.
+  String _onlineDevice(Request request) {
+    final id = request.params['id']!;
+    if (_devices.find(id) == null) throw _notFound;
+    if (!_hub.isOnline(id)) throw _offline;
+    return id;
+  }
+
+  static const _offline = ApiException.conflict(
+    'device_offline',
+    'A TV está offline.',
+  );
 
   Response _list(Request request) => jsonResponse({
     'devices': [for (final s in _hub.summaries()) s.toJson()],
@@ -192,11 +243,18 @@ class DevicesApi {
     return Response(202);
   }
 
-  Response _requestScreenshot(String id) {
-    final requestId = _screenshots.begin(id);
+  Response _requestScreenshot(
+    String id, {
+    Duration cooldown = screenshotCooldown,
+    int? maxWidth,
+  }) {
+    final requestId = _screenshots.begin(id, cooldown: cooldown);
     final envelope = Envelope.create(
       MessageTypes.cmdScreenshot,
-      payload: ScreenshotRequest(requestId: requestId).toJson(),
+      payload: ScreenshotRequest(
+        requestId: requestId,
+        maxWidth: maxWidth,
+      ).toJson(),
     );
     _screenshots.bindRef(id, requestId, envelope.id);
     final sent = _hub.send(id, envelope);

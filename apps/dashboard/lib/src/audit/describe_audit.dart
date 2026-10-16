@@ -14,6 +14,7 @@ final _rules = <(String, RegExp, String)>[
   ('DELETE', RegExp(r'^/devices/[^/]+$'), 'Removeu TV'),
   ('PUT', RegExp(r'^/devices/[^/]+/content$'), 'Trocou o conteúdo da TV'),
   ('POST', RegExp(r'^/devices/[^/]+/commands$'), 'Enviou comando para a TV'),
+  ('POST', RegExp(r'^/devices/[^/]+/live$'), 'Abriu o controle remoto da TV'),
   ('DELETE', RegExp(r'^/device$'), 'TV se despareou'),
   ('POST', RegExp(r'^/media/files$'), 'Enviou arquivo'),
   ('POST', RegExp(r'^/media$'), 'Adicionou site'),

@@ -242,6 +242,15 @@ class DeviceSocket {
     try {
       final error = ErrorPayload.fromJson(envelope.payload);
       _screenshots.dropByRef(deviceId, error.ref);
+      if (remoteInputErrors.contains(error.code)) {
+        // Quem está controlando a TV precisa saber (ex.: "clique no campo").
+        final message = error.message;
+        _hub.publish(MessageTypes.deviceInputError, {
+          'deviceId': deviceId,
+          'code': error.code,
+          'message': message.length > 200 ? message.substring(0, 200) : message,
+        });
+      }
       _log.info(
         LogEvent('erro informado pela TV', {
           'deviceId': deviceId,

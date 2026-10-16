@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:beyond_protocol/beyond_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
+
+import '../remote/remote_input.dart';
 
 /// Controle de um player aberto.
 abstract interface class WebPlayerController {
@@ -46,7 +49,7 @@ class WebViewPlayer extends StatefulWidget {
 }
 
 class _WebViewPlayerState extends State<WebViewPlayer>
-    implements WebPlayerController {
+    implements WebPlayerController, RemoteInputTarget {
   late final WebViewController _controller;
   Timer? _retry;
   bool _failed = false;
@@ -100,6 +103,21 @@ class _WebViewPlayerState extends State<WebViewPlayer>
   Future<void> reload() {
     _retry?.cancel();
     return _load();
+  }
+
+  RemoteInputDriver? _input;
+
+  @override
+  Future<void> input(RemoteInput input) {
+    final platform = _controller.platform;
+    if (platform is! AndroidWebViewController) {
+      throw const RemoteInputException('Controle remoto só no Android.');
+    }
+    final driver = _input ??= RemoteInputDriver(
+      webViewId: platform.webViewIdentifier,
+      runJavaScript: _controller.runJavaScriptReturningResult,
+    );
+    return driver.send(input);
   }
 
   @override

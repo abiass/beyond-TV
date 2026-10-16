@@ -15,16 +15,31 @@ const screenshotCooldown = Duration(seconds: 5);
 /// MIME aceitos numa captura.
 const screenshotMimes = {'image/jpeg', 'image/png'};
 
+/// Largura dos quadros do controle ao vivo: menor, para chegarem rápido.
+const liveFrameMaxWidth = 960;
+
+/// Intervalo mínimo entre quadros do controle ao vivo da mesma TV.
+const liveFrameCooldown = Duration(milliseconds: 250);
+
 /// Payload do `cmd.screenshot`: o servidor pede uma captura.
 final class ScreenshotRequest {
-  const ScreenshotRequest({required this.requestId});
+  const ScreenshotRequest({required this.requestId, this.maxWidth});
 
   factory ScreenshotRequest.fromJson(Map<String, Object?> json) =>
-      ScreenshotRequest(requestId: json.field<String>('requestId'));
+      ScreenshotRequest(
+        requestId: json.field<String>('requestId'),
+        maxWidth: json.optionalField<int>('maxWidth'),
+      );
 
   final String requestId;
 
-  Map<String, Object?> toJson() => {'requestId': requestId};
+  /// Largura máxima pedida; sem ela, [screenshotMaxWidth].
+  final int? maxWidth;
+
+  Map<String, Object?> toJson() => {
+        'requestId': requestId,
+        if (maxWidth != null) 'maxWidth': maxWidth,
+      };
 }
 
 /// Payload do `screenshot.result`: a imagem em base64.

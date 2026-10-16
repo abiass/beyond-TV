@@ -379,6 +379,18 @@ class ApiClient {
     return json['requestId'] as String? ?? '';
   }
 
+  /// Abre o controle ao vivo da TV [id] (fica na auditoria).
+  Future<void> startLiveControl(String id) =>
+      _send('POST', '/api/v1/devices/$id/live');
+
+  /// Pede um quadro do controle ao vivo; chega como `device.screenshot`.
+  Future<void> requestLiveFrame(String id) =>
+      _send('POST', '/api/v1/devices/$id/live/frame');
+
+  /// Envia um toque, tecla, texto ou rolagem para o site aberto na TV.
+  Future<void> sendRemoteInput(String id, RemoteInput input) =>
+      _send('POST', '/api/v1/devices/$id/live/input', body: input.toJson());
+
   /// Endereço da última captura da TV [id]. [capturedAt] entra como
   /// parâmetro só para o navegador não reaproveitar a imagem anterior.
   Uri screenshotUrl(String id, {DateTime? capturedAt}) => _baseUri.resolve(
