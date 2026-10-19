@@ -7,6 +7,15 @@ o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [1.2.1] — 2026-10-19
+
+### Corrigido
+
+- O controle ao vivo estava muito lento. A TV agora captura a tela já no
+  tamanho do quadro, sem copiar a tela inteira (até 33 MB numa TV 4K) a cada
+  quadro, e o painel pede o próximo quadro assim que o anterior chega. Uma
+  captura perdida trava a imagem por 2 s, não mais 5.
+
 ## [1.2.0] — 2026-10-16
 
 ### Adicionado

@@ -19,8 +19,18 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 class MainActivity : FlutterActivity() {
+    /** Comprime as capturas uma de cada vez, sem criar uma thread por quadro. */
+    private val compressor = Executors.newSingleThreadExecutor()
+
+    override fun onDestroy() {
+        compressor.shutdown()
+        super.onDestroy()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SCREENSHOT_CHANNEL)
@@ -98,18 +108,21 @@ class MainActivity : FlutterActivity() {
      * numa SurfaceView, que é uma camada separada da janela: copiar a janela
      * sai preto. Por isso copia a própria SurfaceView. Se mesmo assim vier
      * preto e houver uma WebView, desenha a WebView direto.
+     *
+     * O `PixelCopy` já reduz a imagem ao tamanho do bitmap de destino, na GPU:
+     * não aloca a tela inteira (33 MB numa TV 4K) a cada quadro do controle
+     * ao vivo nem reduz na CPU depois.
      */
     private fun captureScreen(maxWidth: Int, result: MethodChannel.Result) {
         val surface = findView(window.decorView) { it is SurfaceView && it.isShown } as SurfaceView?
         val source: View = surface ?: window.decorView
-        val width = source.width
-        val height = source.height
-        if (width <= 0 || height <= 0) {
+        if (source.width <= 0 || source.height <= 0) {
             result.error("capture_failed", "Tela sem tamanho", null)
             return
         }
         val bitmap: Bitmap
         try {
+            val (width, height) = targetSize(source.width, source.height, maxWidth)
             bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         } catch (e: Exception) {
             result.error("capture_failed", e.message, null)
@@ -158,12 +171,22 @@ class MainActivity : FlutterActivity() {
             return
         }
         try {
-            val bitmap = Bitmap.createBitmap(webView.width, webView.height, Bitmap.Config.ARGB_8888)
-            webView.draw(Canvas(bitmap))
+            val (width, height) = targetSize(webView.width, webView.height, maxWidth)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.scale(width.toFloat() / webView.width, height.toFloat() / webView.height)
+            webView.draw(canvas)
             compressInBackground(bitmap, maxWidth, result)
         } catch (e: Exception) {
             result.error("capture_failed", e.message, null)
         }
+    }
+
+    /** [width] x [height] reduzido para caber em [maxWidth], na mesma proporção. */
+    private fun targetSize(width: Int, height: Int, maxWidth: Int): Pair<Int, Int> {
+        if (maxWidth <= 0 || width <= maxWidth) return Pair(width, height)
+        val scaledHeight = Math.round(height * maxWidth.toFloat() / width)
+        return Pair(maxWidth, Math.max(scaledHeight, 1))
     }
 
     /** Primeira view da árvore de [root] que satisfaz [match]. */
@@ -194,21 +217,27 @@ class MainActivity : FlutterActivity() {
 
     /** Reduz e comprime fora da thread principal; responde na thread principal. */
     private fun compressInBackground(bitmap: Bitmap, maxWidth: Int, result: MethodChannel.Result) {
-        Thread {
-            val outcome: Result<ByteArray> = try {
-                Result.success(scaleAndCompress(bitmap, maxWidth))
-            } catch (e: Exception) {
-                Result.failure(e)
+        try {
+            compressor.execute {
+                val outcome: Result<ByteArray> = try {
+                    Result.success(scaleAndCompress(bitmap, maxWidth))
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+                runOnUiThread {
+                    outcome.fold(
+                        onSuccess = { bytes -> result.success(bytes) },
+                        onFailure = { e ->
+                            result.error("capture_failed", e.message ?: "erro ao comprimir a imagem", null)
+                        },
+                    )
+                }
             }
-            runOnUiThread {
-                outcome.fold(
-                    onSuccess = { bytes -> result.success(bytes) },
-                    onFailure = { e ->
-                        result.error("capture_failed", e.message ?: "erro ao comprimir a imagem", null)
-                    },
-                )
-            }
-        }.start()
+        } catch (e: RejectedExecutionException) {
+            // A activity está fechando.
+            bitmap.recycle()
+            result.error("capture_failed", "App fechando", null)
+        }
     }
 
     private fun scaleAndCompress(bitmap: Bitmap, maxWidth: Int): ByteArray {

@@ -83,7 +83,7 @@ void main() {
     expect(api.liveFrames, 2);
   });
 
-  testWidgets('sem quadro em 5 s, pede de novo', (tester) async {
+  testWidgets('sem quadro em 2 s, pede de novo', (tester) async {
     await open(tester);
 
     await tester.pump(liveFrameWait);

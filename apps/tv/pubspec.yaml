@@ -1,6 +1,6 @@
 name: beyond_tv
 description: Player do Beyond TV para Android TV.
-version: 1.2.0+3
+version: 1.2.1+4
 publish_to: none
 resolution: workspace
 
