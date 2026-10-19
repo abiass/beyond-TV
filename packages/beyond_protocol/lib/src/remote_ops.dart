@@ -19,7 +19,7 @@ const screenshotMimes = {'image/jpeg', 'image/png'};
 const liveFrameMaxWidth = 960;
 
 /// Intervalo mínimo entre quadros do controle ao vivo da mesma TV.
-const liveFrameCooldown = Duration(milliseconds: 250);
+const liveFrameCooldown = Duration(milliseconds: 100);
 
 /// Payload do `cmd.screenshot`: o servidor pede uma captura.
 final class ScreenshotRequest {

@@ -13,11 +13,13 @@ import '../realtime/admin_events.dart';
 import '../router.dart';
 import 'devices_controller.dart';
 
-/// Espera por um quadro antes de pedir outro.
-const liveFrameWait = Duration(seconds: 5);
+/// Espera por um quadro antes de pedir outro (a TV pode ter falhado a
+/// captura sem avisar).
+const liveFrameWait = Duration(seconds: 2);
 
-/// Pausa entre um quadro recebido e o pedido do próximo.
-const liveFrameGap = Duration(milliseconds: 150);
+/// Pausa entre um quadro recebido e o pedido do próximo: só o bastante
+/// para a tela ser redesenhada.
+const liveFrameGap = Duration(milliseconds: 16);
 
 /// Junta as letras digitadas antes de enviar, para não mandar uma
 /// requisição por tecla.

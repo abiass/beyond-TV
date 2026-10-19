@@ -607,8 +607,8 @@ desenha tudo, inclusive WebView e vídeo, que entram como texturas (canal
 janela da activity sairia preto, porque a `SurfaceView` é uma camada
 separada. Se a cópia vier preta e houver uma WebView, a TV desenha a WebView
 direto. Se o canal falhar, usa a árvore do Flutter (`RepaintBoundary`). A
-imagem é reduzida a `maxWidth` do pedido (ou 1280 px, `screenshotMaxWidth`)
-e vai em JPEG.
+imagem é reduzida pelo próprio `PixelCopy` (sem copiar a tela inteira) a
+`maxWidth` do pedido (ou 1280 px, `screenshotMaxWidth`) e vai em JPEG.
 
 ### Controle ao vivo (1.2)
 
@@ -619,7 +619,7 @@ rodando.
 | Método | Rota | Auth | Resposta |
 |--------|------|------|----------|
 | POST | `/devices/:id/live` | admin | `204`. Abre o controle; só confere a TV. Existe para a auditoria registrar quem controlou qual TV. |
-| POST | `/devices/:id/live/frame` | admin | `202 { "requestId" }`. Como a captura acima, com `maxWidth` 960 (`liveFrameMaxWidth`) e intervalo mínimo de 250 ms (`liveFrameCooldown`). |
+| POST | `/devices/:id/live/frame` | admin | `202 { "requestId" }`. Como a captura acima, com `maxWidth` 960 (`liveFrameMaxWidth`) e intervalo mínimo de 100 ms (`liveFrameCooldown`). |
 | POST | `/devices/:id/live/input` | admin | `202`. Corpo `RemoteInput`; vai para a TV como `cmd.input`. `400` se inválido. |
 
 As três respondem `409 device_offline` com a TV desconectada. Quadros e
@@ -637,7 +637,8 @@ senha).
 ```
 
 - O painel pede um quadro assim que o anterior chega (`device.screenshot`),
-  dando cerca de 3 por segundo. Sem resposta em 5 s, pede de novo.
+  respeitando o intervalo mínimo de 100 ms do servidor. Sem resposta em
+  2 s, pede de novo.
 - **Na TV**, só um site aceita entradas. Toque, teclas e rolagem viram
   eventos de toque e de teclado do Android na WebView nativa (canal
   `beyond_tv/remote_input`, via `WebViewFlutterAndroidExternalApi`), como se
